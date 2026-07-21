@@ -1,0 +1,45 @@
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# VS Code local settings
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Credentials and private keys
+*.pem
+*.key
+credentials
+config
+
+# Frontend dependencies
+node_modules/
+
+# Temporary files
+tmp/
+temp/

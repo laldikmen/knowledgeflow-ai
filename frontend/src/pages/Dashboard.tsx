@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StatCard } from '../components/StatCard';
 import { Card } from '../components/Card';
 import { ActivityItem } from '../components/ActivityItem';
+import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);

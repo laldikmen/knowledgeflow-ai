@@ -6,8 +6,15 @@
 
 .dashboard-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-lg);
+  width: 100%;
+}
+
+@supports not (grid-template-columns: repeat(3, 1fr)) {
+  .dashboard-stats {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
 }
 
 .dashboard-activity {
@@ -36,19 +43,19 @@
   padding: 0;
 }
 
-@media (max-width: 1024px) {
-  .dashboard-stats {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
+@media (max-width: 1400px) {
   .dashboard-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 500px) {
+@media (max-width: 900px) {
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
   .dashboard-stats {
     grid-template-columns: 1fr;
   }

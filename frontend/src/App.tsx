@@ -1,36 +1,56 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
-import Home from './pages/Home';
-import Projects from './pages/Projects';
-import NotFound from './pages/NotFound';
+import { useState } from 'react';
 
 function App() {
+  const [page, setPage] = useState('home');
+
   return (
-    <BrowserRouter>
-      <div className="app">
-        <nav className="navbar">
-          <div className="navbar-brand">
-            <h1>KnowledgeFlow AI</h1>
+    <div className="app">
+      <nav className="navbar">
+        <div className="navbar-brand">
+          <h1>KnowledgeFlow AI</h1>
+        </div>
+        <ul className="nav-links">
+          <li><a onClick={() => setPage('home')}>Home</a></li>
+          <li><a onClick={() => setPage('projects')}>Projects</a></li>
+        </ul>
+      </nav>
+
+      <main className="main-content">
+        {page === 'home' && (
+          <div className="home-page">
+            <section className="hero">
+              <h2>Welcome to KnowledgeFlow AI</h2>
+              <p>AI-powered enterprise knowledge management platform</p>
+            </section>
+
+            <section className="features">
+              <h3>Features</h3>
+              <ul>
+                <li>📄 Document Management</li>
+                <li>🤖 AI-Powered Summaries</li>
+                <li>✅ Task Tracking</li>
+                <li>💬 Chat Assistant</li>
+                <li>👥 Team Collaboration</li>
+              </ul>
+            </section>
           </div>
-          <ul className="nav-links">
-            <li><Link to="/">Home</Link></li>
-            <li><Link to="/projects">Projects</Link></li>
-          </ul>
-        </nav>
+        )}
 
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </main>
+        {page === 'projects' && (
+          <div className="projects-page">
+            <h2>Projects</h2>
+            <div className="empty-state">
+              <p>No projects yet. Create one to get started!</p>
+            </div>
+          </div>
+        )}
+      </main>
 
-        <footer className="footer">
-          <p>&copy; 2026 KnowledgeFlow AI. All rights reserved.</p>
-        </footer>
-      </div>
-    </BrowserRouter>
+      <footer className="footer">
+        <p>&copy; 2026 KnowledgeFlow AI. All rights reserved.</p>
+      </footer>
+    </div>
   );
 }
 

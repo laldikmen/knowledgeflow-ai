@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 
@@ -36,20 +36,23 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   onSearch,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const currentPage = useMemo(() => {
+    const path = location.pathname;
+    for (const [page, route] of Object.entries(pageRoutes)) {
+      if (path === route || path.startsWith(route + '/')) {
+        return page;
+      }
+    }
+    return 'dashboard';
+  }, [location.pathname]);
 
   const handleNavigate = (page: string) => {
     const route = pageRoutes[page] || '/dashboard';
     navigate(route);
     setIsMobileMenuOpen(false);
-  };
-
-  const getCurrentPage = () => {
-    const path = window.location.pathname;
-    for (const [page, route] of Object.entries(pageRoutes)) {
-      if (path.includes(route)) return page;
-    }
-    return 'dashboard';
   };
 
   const handleLogout = () => {
@@ -62,7 +65,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <div className={`app-layout ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="app-sidebar">
           <Sidebar
-            currentPage={getCurrentPage()}
+            currentPage={currentPage}
             onNavigate={handleNavigate}
             userName={userName}
             userRole={userRole}

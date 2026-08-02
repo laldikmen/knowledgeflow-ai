@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { AppLayout } from './layouts/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
+import { Documents } from './pages/Documents';
+import { Upload } from './pages/Upload';
+import { ActionTracker } from './pages/ActionTracker';
+import { AIChat } from './pages/AIChat';
+import { Timeline } from './pages/Timeline';
 import { Login } from './pages/Login';
 
 interface AuthUser {
@@ -60,6 +65,11 @@ function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/upload" element={<Upload />} />
+          <Route path="/action-tracker" element={<ActionTracker />} />
+          <Route path="/ai-chat" element={<AIChat />} />
+          <Route path="/timeline" element={<Timeline />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </AppLayout>

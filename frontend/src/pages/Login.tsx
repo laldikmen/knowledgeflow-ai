@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import './Login.css';
 
-interface LoginProps {
-  onLoginSuccess: (user: { name: string; role: string; initials: string }) => void;
+interface AuthUser {
+  token: string;
+  email: string;
+  name: string;
+  role: string;
+  initials: string;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+interface LoginProps {
+  onLogin: (authData: AuthUser) => void;
+}
+
+export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,23 +24,44 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!email || !password) {
+      setError('Email and password are required');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual API call
-      // const response = await client.post('/login', { email, password });
+      // TODO: Replace with actual API call to /login endpoint
+      // const response = await fetch('/api/login', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ email, password })
+      // });
+      // const data = await response.json();
 
-      // Simulating successful login for now
-      setTimeout(() => {
-        onLoginSuccess({
-          name: 'Alex Morgan',
-          role: 'Project Manager',
-          initials: 'AM',
-        });
-        setIsLoading(false);
-      }, 500);
+      // Mock authentication - replace with real API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Mock user data based on email
+      const mockUser: AuthUser = {
+        token: 'mock-jwt-token-' + Math.random().toString(36).substr(2, 9),
+        email,
+        name: 'Alex Morgan',
+        role: 'Project Manager',
+        initials: 'AM',
+      };
+
+      onLogin(mockUser);
     } catch (err) {
-      setError('Invalid email or password');
+      setError('Failed to sign in. Please try again.');
+    } finally {
       setIsLoading(false);
     }
   };

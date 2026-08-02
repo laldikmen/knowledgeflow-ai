@@ -1,0 +1,51 @@
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-xl);
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.card:hover:not(.card-highlighted) {
+  border-color: var(--border-light);
+  box-shadow: var(--shadow);
+}
+
+.card-highlighted {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--dark-brown);
+}
+
+.card-highlighted .card-title {
+  color: var(--dark-brown);
+}
+
+.card-highlighted .card-subtitle {
+  color: rgba(38, 35, 29, 0.7);
+}
+
+.card-header {
+  margin-bottom: var(--sp-lg);
+}
+
+.card-title {
+  font-size: var(--small);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin: 0 0 var(--sp-xs);
+}
+
+.card-subtitle {
+  font-size: var(--body);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}

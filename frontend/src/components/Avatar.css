@@ -1,0 +1,31 @@
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: white;
+  font-weight: var(--weight-bold);
+  flex-shrink: 0;
+}
+
+.avatar-text {
+  display: block;
+}
+
+.avatar-small {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+
+.avatar-medium {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+}
+
+.avatar-large {
+  width: 56px;
+  height: 56px;
+  font-size: 18px;
+}

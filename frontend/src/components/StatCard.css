@@ -1,0 +1,15 @@
+.stat-card .card-content {
+  align-items: center;
+  gap: var(--sp-lg);
+}
+
+.stat-card-value {
+  font-size: 48px;
+  font-weight: var(--weight-bold);
+  color: var(--text);
+  line-height: 1;
+}
+
+.stat-card-highlighted .stat-card-value {
+  color: var(--dark-brown);
+}

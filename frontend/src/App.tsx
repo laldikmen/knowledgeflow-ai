@@ -2,6 +2,7 @@ import './App.css';
 import { useState } from 'react';
 import { AppLayout } from './layouts/AppLayout';
 import { Dashboard } from './pages/Dashboard';
+import { Projects } from './pages/Projects';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -11,6 +12,15 @@ function App() {
 
   const handleLogout = () => {
     setCurrentPage('dashboard');
+  };
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'projects':
+        return <Projects />;
+      default:
+        return <Dashboard />;
+    }
   };
 
   return (
@@ -23,7 +33,7 @@ function App() {
       itemsNeedingReview={{ count: 3, projects: 2 }}
       onLogout={handleLogout}
     >
-      <Dashboard />
+      {renderPage()}
     </AppLayout>
   );
 }

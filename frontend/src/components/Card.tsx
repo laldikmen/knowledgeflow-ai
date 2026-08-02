@@ -8,6 +8,7 @@ interface CardProps {
   className?: string;
   onClick?: () => void;
   highlighted?: boolean;
+  dark?: boolean;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -17,10 +18,11 @@ export const Card: React.FC<CardProps> = ({
   className = '',
   onClick,
   highlighted = false,
+  dark = false,
 }) => {
   return (
     <div
-      className={`card ${highlighted ? 'card-highlighted' : ''} ${className}`}
+      className={`card ${highlighted ? 'card-highlighted' : ''} ${dark ? 'card-dark' : ''} ${className}`}
       onClick={onClick}
     >
       {title && (

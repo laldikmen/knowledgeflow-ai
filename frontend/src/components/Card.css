@@ -26,6 +26,20 @@
   color: rgba(38, 35, 29, 0.7);
 }
 
+.card-dark {
+  background: var(--dark-brown);
+  border-color: var(--dark-brown);
+  color: var(--white);
+}
+
+.card-dark .card-title {
+  color: var(--white);
+}
+
+.card-dark .card-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .card-header {
   margin-bottom: var(--sp-lg);
 }

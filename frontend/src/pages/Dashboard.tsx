@@ -70,6 +70,12 @@ export const Dashboard: React.FC = () => {
           value="9"
         />
         <StatCard
+          title="Overdue tasks"
+          value="3"
+          dark={true}
+          badge={{ status: 'pending', label: 'needs action' }}
+        />
+        <StatCard
           title="Upcoming deadlines (7d)"
           value="5"
         />
@@ -85,20 +91,59 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* Recent Activity Section */}
-      <Card title="Recent activity" className="dashboard-activity">
-        {recentActivities.map((activity, index) => (
-          <ActivityItem
-            key={index}
-            avatar={activity.avatar}
-            action={activity.action}
-            actionHighlight={activity.actionHighlight}
-            timestamp={activity.timestamp}
-            status={activity.status}
-            details={activity.details}
-          />
-        ))}
-      </Card>
+      {/* Bottom Section - Recent Activity & Project Risk Overview */}
+      <div className="dashboard-bottom">
+        {/* Recent Activity Section */}
+        <Card title="Recent activity" className="dashboard-activity">
+          {recentActivities.map((activity, index) => (
+            <ActivityItem
+              key={index}
+              avatar={activity.avatar}
+              action={activity.action}
+              actionHighlight={activity.actionHighlight}
+              timestamp={activity.timestamp}
+              status={activity.status}
+              details={activity.details}
+            />
+          ))}
+        </Card>
+
+        {/* Project Risk Overview Section */}
+        <Card title="Project risk overview" className="dashboard-risk-overview">
+          <div className="risk-item">
+            <div className="risk-name">Project Alpha</div>
+            <div className="risk-bar">
+              <div className="risk-indicator medium" style={{ width: '60%' }}></div>
+            </div>
+            <div className="risk-level">Medium</div>
+          </div>
+          <div className="risk-item">
+            <div className="risk-name">Project Beta</div>
+            <div className="risk-bar">
+              <div className="risk-indicator high" style={{ width: '85%' }}></div>
+            </div>
+            <div className="risk-level">High</div>
+          </div>
+          <div className="risk-item">
+            <div className="risk-name">Onboarding Revamp</div>
+            <div className="risk-bar">
+              <div className="risk-indicator low" style={{ width: '35%' }}></div>
+            </div>
+            <div className="risk-level">Low</div>
+          </div>
+          <div className="risk-deadlines">
+            <div className="risk-deadline-title">Upcoming deadlines</div>
+            <div className="risk-deadline-item">
+              <div>Create upload API</div>
+              <div className="risk-deadline-date">Jul 20</div>
+            </div>
+            <div className="risk-deadline-item overdue">
+              <div>Prepare frontend framwork</div>
+              <div className="risk-deadline-date">Overdue · Jul 8</div>
+            </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 };

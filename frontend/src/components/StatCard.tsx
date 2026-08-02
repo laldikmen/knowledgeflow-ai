@@ -13,6 +13,7 @@ interface StatCardProps {
   };
   subtitle?: string;
   highlighted?: boolean;
+  dark?: boolean;
   onClick?: () => void;
   className?: string;
 }
@@ -23,6 +24,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   badge,
   subtitle,
   highlighted = false,
+  dark = false,
   onClick,
   className = '',
 }) => {
@@ -31,6 +33,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       title={title}
       subtitle={subtitle}
       highlighted={highlighted}
+      dark={dark}
       onClick={onClick}
       className={`stat-card ${className}`}
     >

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Input } from './Input';
+import { Button } from './Button';
 
 interface HeaderProps {
   userName?: string;
@@ -8,12 +9,14 @@ interface HeaderProps {
     projects: number;
   };
   onSearch?: (query: string) => void;
+  onUpload?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   userName = 'User',
   itemsNeedingReview = { count: 3, projects: 2 },
   onSearch,
+  onUpload,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -41,11 +44,21 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="header-search">
           <Input
             type="search"
-            placeholder="Search..."
+            placeholder="Search knowledge..."
             value={searchQuery}
             onChange={handleSearchChange}
           />
         </div>
+        <Button
+          variant="primary"
+          size="medium"
+          onClick={onUpload}
+        >
+          + Upload
+        </Button>
+        <button className="header-notifications" aria-label="Notifications">
+          🔔
+        </button>
       </div>
     </div>
   );

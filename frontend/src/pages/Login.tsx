@@ -146,12 +146,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             Continue with Acme SSO
           </Button>
         </div>
-
-        {/* RBAC Note */}
-        <p className="login-note">
-          <span className="login-note-label">RBAC</span>
-          On success the app fetches the user's system + project roles and renders only permitted navigation, projects, and features.
-        </p>
       </div>
     </div>
   );

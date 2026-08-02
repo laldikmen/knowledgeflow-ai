@@ -1,10 +1,11 @@
 .login-page {
   min-height: 100vh;
-  background: var(--bg-beige);
+  background: linear-gradient(135deg, #ebe7db 0%, #fef9e7 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--sp-lg);
+  position: relative;
 }
 
 .login-container {
@@ -13,13 +14,18 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-xl);
+  position: relative;
+  z-index: 1;
 }
 
 .login-logo {
   display: flex;
   align-items: center;
   gap: var(--sp-md);
-  margin-bottom: var(--sp-lg);
+  position: absolute;
+  top: var(--sp-lg);
+  left: var(--sp-lg);
+  z-index: 10;
 }
 
 .login-logo-icon {
@@ -85,21 +91,47 @@
 }
 
 .login-password-group {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-sm);
 }
 
-.login-forgot {
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input {
+  width: 100%;
+  padding-right: 60px;
+}
+
+.password-toggle {
   position: absolute;
-  top: 0;
-  right: 0;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: var(--caption);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 0;
+}
+
+.password-toggle:hover {
+  color: #e0bf3d;
+}
+
+.login-forgot {
+  align-self: flex-end;
   font-size: var(--caption);
   color: var(--gold);
   text-decoration: none;
   font-weight: var(--weight-semibold);
   transition: color 0.2s ease;
+  margin-top: var(--sp-xs);
 }
 
 .login-forgot:hover {

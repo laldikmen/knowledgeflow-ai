@@ -1,253 +1,340 @@
-import React, { useState, useRef } from 'react';
-import { Card } from '../components/Card';
+import React, { useRef, useState } from 'react';
 import { Button } from '../components/Button';
-import { Input } from '../components/Input';
 import './Upload.css';
 
+type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
+
+type UploadStatus = 'pending' | 'processing' | 'success' | 'error';
+
 interface UploadFile {
+  id: string;
   name: string;
   size: number;
-  progress: number;
-  status: 'pending' | 'uploading' | 'success' | 'error';
+  status: UploadStatus;
 }
+
+const PROJECT_OPTIONS = [
+  { value: 'project-alpha', label: 'Project Alpha' },
+  { value: 'project-beta', label: 'Project Beta' },
+  { value: 'onboarding-revamp', label: 'Onboarding Revamp' },
+];
+
+const inferDocumentType = (fileName: string): DocumentType => {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+
+  if (extension === 'pdf') return 'pdf';
+  if (extension === 'doc' || extension === 'docx') return 'doc';
+  if (extension === 'ppt' || extension === 'pptx') return 'ppt';
+  return 'transcript';
+};
 
 export const Upload: React.FC = () => {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [projectId, setProjectId] = useState('');
-  const [documentType, setDocumentType] = useState<'pdf' | 'doc' | 'ppt' | 'transcript'>('pdf');
+  const [projectId, setProjectId] = useState('project-alpha');
+  const [documentType, setDocumentType] = useState<DocumentType>('transcript');
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
+  const handleDrag = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.type === 'dragenter' || event.type === 'dragover') {
       setDragActive(true);
-    } else if (e.type === 'dragleave') {
+    } else if (event.type === 'dragleave') {
       setDragActive(false);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const droppedFiles = e.dataTransfer.files;
-    if (droppedFiles) {
-      processFiles(droppedFiles);
-    }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      processFiles(e.target.files);
-    }
-  };
-
   const processFiles = (fileList: FileList) => {
-    const newFiles: UploadFile[] = Array.from(fileList).map(file => ({
+    const selectedFiles = Array.from(fileList).map((file, index) => ({
+      id: `${file.name}-${file.lastModified}-${index}`,
       name: file.name,
       size: file.size,
-      progress: 0,
-      status: 'pending',
+      status: 'pending' as UploadStatus,
     }));
 
-    setFiles(prev => [...prev, ...newFiles]);
+    if (selectedFiles.length === 0) return;
 
-    newFiles.forEach((file, index) => {
-      simulateUpload(index + files.length);
-    });
+    setFiles((currentFiles) => [...currentFiles, ...selectedFiles]);
+
+    const firstFile = fileList[0];
+    setDocumentType(inferDocumentType(firstFile.name));
+
+    if (!title.trim()) {
+      const suggestedTitle = firstFile.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+
+      setTitle(suggestedTitle);
+    }
   };
 
-  const simulateUpload = (fileIndex: number) => {
-    setFiles(prev => {
-      const updated = [...prev];
-      updated[fileIndex].status = 'uploading';
-      return updated;
-    });
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
 
-    const interval = setInterval(() => {
-      setFiles(prev => {
-        const updated = [...prev];
-        if (updated[fileIndex].progress < 100) {
-          updated[fileIndex].progress += Math.random() * 30;
-          if (updated[fileIndex].progress > 100) {
-            updated[fileIndex].progress = 100;
-          }
-        } else {
-          updated[fileIndex].status = 'success';
-          clearInterval(interval);
-        }
-        return updated;
-      });
-    }, 500);
+    if (event.dataTransfer.files.length > 0) {
+      processFiles(event.dataTransfer.files);
+    }
   };
 
-  const handleUpload = async () => {
-    if (!title || !projectId || files.length === 0) {
-      alert('Please fill in all fields and select at least one file');
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files?.length) {
+      processFiles(event.target.files);
+      event.target.value = '';
+    }
+  };
+
+  const removeFile = (fileId: string) => {
+    setFiles((currentFiles) =>
+      currentFiles.filter((file) => file.id !== fileId),
+    );
+  };
+
+  const handleStartProcessing = async () => {
+    if (!title.trim() || !projectId || files.length === 0) {
       return;
     }
 
-    // TODO: Replace with real API call
-    // await client.post('/documents/upload', {
-    //   title,
-    //   projectId,
-    //   documentType,
-    //   files
-    // });
+    setIsProcessing(true);
+    setFiles((currentFiles) =>
+      currentFiles.map((file) => ({ ...file, status: 'processing' })),
+    );
 
-    console.log('Uploading:', { title, projectId, documentType, files });
+    // TODO: Replace this mock delay with the real upload and processing API call.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    setFiles((currentFiles) =>
+      currentFiles.map((file) => ({ ...file, status: 'success' })),
+    );
+    setIsProcessing(false);
+
+    console.log('Starting AI processing:', {
+      projectId,
+      documentType,
+      title,
+      description,
+      files,
+    });
   };
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const unitIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+    const value = bytes / Math.pow(1024, unitIndex);
+
+    return `${value.toFixed(unitIndex === 0 ? 0 : 0)} ${units[unitIndex]}`;
   };
 
-  const totalFiles = files.length;
-  const uploadedFiles = files.filter(f => f.status === 'success').length;
+  const canStartProcessing =
+    files.length > 0 && Boolean(projectId) && Boolean(title.trim());
 
   return (
     <div className="upload">
-      <div className="upload-header">
-        <h2>Upload Center</h2>
-        <p className="upload-subtitle">Add documents or meeting transcripts for AI processing</p>
-      </div>
-
-      <div className="upload-content">
-        {/* Upload Form */}
-        <Card className="upload-form-card">
-          <h3>Upload Details</h3>
-
-          <div className="form-group">
-            <Input
-              type="text"
-              label="Document Title"
-              placeholder="e.g., Project Alpha Weekly Meeting"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+      <div className="upload-layout">
+        <section className="upload-form-card">
+          <div
+            className={`upload-dropzone ${dragActive ? 'active' : ''}`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Choose files to upload"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="upload-file-input"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.vtt"
             />
-          </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Document Type</label>
-              <select
-                className="form-select"
-                value={documentType}
-                onChange={(e) => setDocumentType(e.target.value as any)}
-              >
-                <option value="pdf">PDF Document</option>
-                <option value="doc">Word Document</option>
-                <option value="ppt">PowerPoint Presentation</option>
-                <option value="transcript">Meeting Transcript</option>
-              </select>
+            <div className="upload-dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 16V4" />
+                <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
+                <path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+              </svg>
             </div>
 
-            <div className="form-group">
-              <Input
-                type="text"
-                label="Project"
-                placeholder="Select project..."
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-              />
+            <div className="upload-dropzone-title">
+              Drag &amp; drop, or <span>browse files</span>
+            </div>
+            <div className="upload-dropzone-help">
+              PDF, Word, PowerPoint or transcript · up to 50 MB
             </div>
           </div>
-        </Card>
 
-        {/* Drag and Drop Area */}
-        <div
-          className={`upload-dropzone ${dragActive ? 'active' : ''}`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.vtt"
-          />
-          <div className="dropzone-content">
-            <div className="dropzone-icon">📄</div>
-            <h3>Drag and drop files here</h3>
-            <p>or click to browse</p>
-            <p className="dropzone-info">PDF, Word, PowerPoint, or Transcript files up to 50 MB</p>
-          </div>
-        </div>
+          {files.length > 0 && (
+            <div className="upload-selected-files">
+              {files.map((file) => (
+                <div className="upload-file-row" key={file.id}>
+                  <div className="upload-file-type-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      {documentType === 'transcript' ? (
+                        <>
+                          <circle cx="12" cy="12" r="7" />
+                          <path d="M12 8v4l3 2" />
+                        </>
+                      ) : (
+                        <>
+                          <path d="M7 3h7l4 4v14H7z" />
+                          <path d="M14 3v5h5" />
+                        </>
+                      )}
+                    </svg>
+                  </div>
 
-        {/* File List */}
-        {files.length > 0 && (
-          <Card className="upload-files-card">
-            <h3>
-              Files ({uploadedFiles}/{totalFiles} uploaded)
-            </h3>
-            <div className="upload-files-list">
-              {files.map((file, index) => (
-                <div key={index} className="upload-file-item">
-                  <div className="file-info">
-                    <div className="file-icon">📎</div>
-                    <div className="file-details">
-                      <div className="file-name">{file.name}</div>
-                      <div className="file-size">{formatFileSize(file.size)}</div>
+                  <div className="upload-file-details">
+                    <div className="upload-file-name">{file.name}</div>
+                    <div className="upload-file-meta">
+                      {formatFileSize(file.size)} ·{' '}
+                      {documentType === 'transcript'
+                        ? 'transcript'
+                        : documentType.toUpperCase()}
                     </div>
                   </div>
-                  <div className="file-progress">
-                    {file.status === 'uploading' && (
-                      <div className="progress-bar">
-                        <div
-                          className="progress-fill"
-                          style={{ width: `${file.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    {file.status === 'success' && (
-                      <span className="status-badge success">✓ Done</span>
-                    )}
-                    {file.status === 'error' && (
-                      <span className="status-badge error">✕ Failed</span>
-                    )}
-                  </div>
+
+                  {file.status === 'processing' && (
+                    <span className="upload-file-state">Processing…</span>
+                  )}
+
+                  {file.status === 'success' && (
+                    <span className="upload-file-state upload-file-state--success">
+                      Ready
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    className="upload-file-remove"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeFile(file.id);
+                    }}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>
-          </Card>
-        )}
-      </div>
+          )}
 
-      <div className="upload-actions">
-        <Button variant="secondary" onClick={() => setFiles([])}>
-          Clear All
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleUpload}
-          disabled={files.length === 0 || !title || !projectId}
-        >
-          Upload & Process ({totalFiles} files)
-        </Button>
-      </div>
+          <div className="upload-form-grid">
+            <div className="upload-field">
+              <label htmlFor="upload-project">Project / Department</label>
+              <select
+                id="upload-project"
+                className="upload-control"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+              >
+                {PROJECT_OPTIONS.map((project) => (
+                  <option key={project.value} value={project.value}>
+                    {project.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <Card className="upload-info">
-        <h4>What AI will extract:</h4>
-        <ul>
-          <li>Document summary</li>
-          <li>Key decisions</li>
-          <li>Action items with owners and deadlines</li>
-          <li>Searchable full text</li>
-        </ul>
-      </Card>
+            <div className="upload-field">
+              <label htmlFor="upload-document-type">Document type</label>
+              <select
+                id="upload-document-type"
+                className="upload-control"
+                value={documentType}
+                onChange={(event) =>
+                  setDocumentType(event.target.value as DocumentType)
+                }
+              >
+                <option value="transcript">Meeting transcript</option>
+                <option value="pdf">PDF document</option>
+                <option value="doc">Word document</option>
+                <option value="ppt">PowerPoint presentation</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="upload-field upload-field--full">
+            <label htmlFor="upload-title">Title</label>
+            <input
+              id="upload-title"
+              className="upload-control"
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Project Alpha Weekly Meeting"
+            />
+          </div>
+
+          <div className="upload-field upload-field--full">
+            <label htmlFor="upload-description">
+              Description <span>(optional)</span>
+            </label>
+            <textarea
+              id="upload-description"
+              className="upload-control upload-textarea"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Standup covering MVP scope and API design decisions..."
+            />
+          </div>
+        </section>
+
+        <aside className="upload-ai-card">
+          <h2>What AI will extract</h2>
+
+          <ol className="upload-ai-list">
+            <li>
+              <span>1</span>
+              <p>Summary of the document</p>
+            </li>
+            <li>
+              <span>2</span>
+              <p>Key decisions</p>
+            </li>
+            <li>
+              <span>3</span>
+              <p>Action items + suggested owners &amp; deadlines</p>
+            </li>
+          </ol>
+
+          <Button
+            variant="primary"
+            size="large"
+            fullWidth
+            className="upload-process-button"
+            onClick={handleStartProcessing}
+            disabled={!canStartProcessing}
+            loading={isProcessing}
+          >
+            Start AI Processing
+          </Button>
+
+          <p className="upload-ai-note">
+            Extracted items start as <strong>Draft</strong> for human review.
+          </p>
+        </aside>
+      </div>
     </div>
   );
 };

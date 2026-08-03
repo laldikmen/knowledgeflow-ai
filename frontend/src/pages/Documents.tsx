@@ -1,31 +1,92 @@
-import React, { useState, useEffect } from 'react';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
-import { Input } from '../components/Input';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './Documents.css';
 
-interface Document {
+type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
+type DocumentStatus = 'processed' | 'processing' | 'uploaded' | 'failed';
+
+interface DocumentItem {
   id: number;
   name: string;
-  type: 'pdf' | 'doc' | 'ppt' | 'transcript';
+  type: DocumentType;
   uploadedBy: string;
   uploadedDate: string;
-  status: 'processed' | 'processing' | 'failed';
+  status: DocumentStatus;
+  details: string;
+  action: 'Open' | 'Process' | 'Retry';
 }
 
+const TYPE_FILTERS: Array<{ value: 'all' | DocumentType; label: string }> = [
+  { value: 'all', label: 'All types' },
+  { value: 'transcript', label: 'Meeting transcript' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'doc', label: 'Word' },
+  { value: 'ppt', label: 'PowerPoint' },
+];
+
+const getTypeLabel = (type: DocumentType) => {
+  const labels: Record<DocumentType, string> = {
+    pdf: 'PDF',
+    doc: 'Word',
+    ppt: 'PowerPoint',
+    transcript: 'Meeting transcript',
+  };
+
+  return labels[type];
+};
+
+const DocumentIcon: React.FC<{ type: DocumentType; failed?: boolean }> = ({
+  type,
+  failed = false,
+}) => {
+  if (type === 'transcript') {
+    return (
+      <span className="document-table-icon document-table-icon--transcript">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" />
+          <path d="M12 7.5V12l3 2" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (failed) {
+    return (
+      <span className="document-table-icon document-table-icon--failed">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="7.5" />
+          <path d="M12 8.5v4.5" />
+          <path d="M12 16.5h.01" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={`document-table-icon document-table-icon--${type}`}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 24 24">
+        <path d="M7 3.5h6l4 4V20H7z" />
+        <path d="M13 3.5V8h4" />
+      </svg>
+    </span>
+  );
+};
+
 export const Documents: React.FC = () => {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'pdf' | 'doc' | 'ppt' | 'transcript'>('all');
+  const [filterType, setFilterType] = useState<'all' | DocumentType>('all');
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? '';
 
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
-        // TODO: Replace with real API call
-        // const response = await client.get('/documents');
-
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // TODO: Replace with the real API call.
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         setDocuments([
           {
@@ -33,45 +94,55 @@ export const Documents: React.FC = () => {
             name: 'Project Alpha Weekly Meeting',
             type: 'transcript',
             uploadedBy: 'Inci',
-            uploadedDate: 'Jul 7, 2026',
+            uploadedDate: 'Jul 7',
             status: 'processed',
+            details: '3 action items · 2 decisions',
+            action: 'Open',
           },
           {
             id: 2,
             name: 'API Design v2.pdf',
             type: 'pdf',
             uploadedBy: 'Inci',
-            uploadedDate: 'Jul 7, 2026',
-            status: 'processed',
+            uploadedDate: 'Jul 7',
+            status: 'processing',
+            details: '1.8 MB',
+            action: 'Open',
           },
           {
             id: 3,
             name: 'MVP Scope.docx',
             type: 'doc',
             uploadedBy: 'Alex Morgan',
-            uploadedDate: 'Jul 5, 2026',
+            uploadedDate: 'Jul 5',
             status: 'processed',
+            details: '640 KB',
+            action: 'Open',
           },
           {
             id: 4,
             name: 'Kickoff Deck.pptx',
             type: 'ppt',
             uploadedBy: 'Jordan Lee',
-            uploadedDate: 'Jul 8, 2026',
-            status: 'processed',
+            uploadedDate: 'Jul 8',
+            status: 'uploaded',
+            details: 'just uploaded',
+            action: 'Process',
           },
           {
             id: 5,
             name: 'Legacy Notes.pdf',
             type: 'pdf',
             uploadedBy: 'Inci',
-            uploadedDate: 'Jul 6, 2026',
+            uploadedDate: 'Jul 6',
             status: 'failed',
+            details: 'Unreadable file — OCR failed',
+            action: 'Retry',
           },
         ]);
-        setIsLoading(false);
-      } catch (err) {
-        console.error(err);
+      } catch (error) {
+        console.error('Failed to load documents', error);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -79,95 +150,135 @@ export const Documents: React.FC = () => {
     fetchDocuments();
   }, []);
 
-  const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = filterType === 'all' || doc.type === filterType;
-    return matchesSearch && matchesType;
-  });
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((document) => {
+      const matchesType = filterType === 'all' || document.type === filterType;
+      const searchableText = [
+        document.name,
+        getTypeLabel(document.type),
+        document.uploadedBy,
+        document.status,
+      ]
+        .join(' ')
+        .toLowerCase();
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      pdf: 'PDF',
-      doc: 'Word',
-      ppt: 'PowerPoint',
-      transcript: 'Transcript',
-    };
-    return labels[type] || type;
-  };
-
-  const getStatusClass = (status: string) => {
-    const classes: Record<string, string> = {
-      processed: 'status-processed',
-      processing: 'status-processing',
-      failed: 'status-failed',
-    };
-    return classes[status] || '';
-  };
+      const matchesSearch = !searchQuery || searchableText.includes(searchQuery);
+      return matchesType && matchesSearch;
+    });
+  }, [documents, filterType, searchQuery]);
 
   if (isLoading) {
-    return <div className="documents">Loading documents...</div>;
+    return <div className="documents documents-loading">Loading documents...</div>;
   }
 
   return (
     <div className="documents">
-      <div className="documents-header">
-        <div className="documents-title-section">
-          <h2>Documents & Meetings</h2>
-          <p className="documents-subtitle">{filteredDocuments.length} files</p>
-        </div>
-        <Button variant="primary">Upload Document</Button>
-      </div>
-
-      <Card className="documents-filters">
-        <div className="documents-filter-group">
-          <Input
-            type="text"
-            placeholder="Search files..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      <div className="documents-toolbar" aria-label="Document filters">
         <div className="documents-type-filters">
-          {(['all', 'pdf', 'doc', 'ppt', 'transcript'] as const).map((type) => (
+          {TYPE_FILTERS.map((filter) => (
             <button
-              key={type}
-              className={`filter-btn ${filterType === type ? 'active' : ''}`}
-              onClick={() => setFilterType(type)}
+              type="button"
+              key={filter.value}
+              className={`documents-filter-pill ${
+                filterType === filter.value ? 'active' : ''
+              }`}
+              onClick={() => setFilterType(filter.value)}
             >
-              {type === 'all' ? 'All types' : getTypeLabel(type)}
+              {filter.label}
             </button>
           ))}
-        </div>
-      </Card>
 
-      <div className="documents-list">
-        {filteredDocuments.length === 0 ? (
-          <Card className="documents-empty">
-            <p>No documents found</p>
-          </Card>
-        ) : (
-          filteredDocuments.map((doc) => (
-            <div key={doc.id} className="document-row">
-              <div className="document-info">
-                <div className="document-icon">{doc.type.substring(0, 1).toUpperCase()}</div>
-                <div className="document-details">
-                  <h4 className="document-name">{doc.name}</h4>
-                  <p className="document-meta">
-                    {getTypeLabel(doc.type)} • Uploaded by {doc.uploadedBy} on {doc.uploadedDate}
-                  </p>
-                </div>
-              </div>
-              <div className={`document-status ${getStatusClass(doc.status)}`}>
-                {doc.status === 'processed' && '✓ Processed'}
-                {doc.status === 'processing' && '⟳ Processing'}
-                {doc.status === 'failed' && '✕ Failed'}
-              </div>
-              <Button variant="secondary" size="small">
-                {doc.status === 'failed' ? 'Retry' : 'Open'}
-              </Button>
+          <span className="documents-filter-divider" aria-hidden="true" />
+
+          <button
+            type="button"
+            className="documents-filter-pill documents-status-filter"
+            aria-label="Status filter: all"
+          >
+            Status: all
+          </button>
+        </div>
+      </div>
+
+      <div className="documents-table" role="table" aria-label="Documents and meetings">
+        <div className="documents-table-header" role="row">
+          <div role="columnheader">Name</div>
+          <div role="columnheader">Type</div>
+          <div role="columnheader">Uploaded by</div>
+          <div role="columnheader">Date</div>
+          <div role="columnheader">Status</div>
+          <div role="columnheader">Actions</div>
+        </div>
+
+        <div className="documents-table-body">
+          {filteredDocuments.length === 0 ? (
+            <div className="documents-empty">
+              <h2>No documents found</h2>
+              <p>Try another search or document type.</p>
             </div>
-          ))
-        )}
+          ) : (
+            filteredDocuments.map((document) => {
+              const isFailed = document.status === 'failed';
+              const isProcessing = document.status === 'processing';
+
+              return (
+                <div
+                  key={document.id}
+                  className={`document-table-row ${isFailed ? 'document-table-row--failed' : ''}`}
+                  role="row"
+                >
+                  <div className="document-table-name-cell" role="cell">
+                    <DocumentIcon type={document.type} failed={isFailed} />
+
+                    <div className="document-table-name-content">
+                      <h3>{document.name}</h3>
+                      <p className={isFailed ? 'document-table-error-text' : ''}>
+                        {document.details}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="document-table-cell" role="cell">
+                    {getTypeLabel(document.type)}
+                  </div>
+
+                  <div className="document-table-cell" role="cell">
+                    {document.uploadedBy}
+                  </div>
+
+                  <div className="document-table-cell" role="cell">
+                    {document.uploadedDate}
+                  </div>
+
+                  <div className="document-table-cell" role="cell">
+                    <span
+                      className={`document-table-status document-table-status--${document.status}`}
+                    >
+                      {isProcessing && <span className="document-processing-ring" />}
+                      {document.status !== 'processing' && (
+                        <span className="document-status-dot" />
+                      )}
+                      {document.status === 'processed' && 'Processed'}
+                      {document.status === 'processing' && 'Processing...'}
+                      {document.status === 'uploaded' && 'Uploaded'}
+                      {document.status === 'failed' && 'Failed'}
+                    </span>
+                  </div>
+
+                  <div className="document-table-actions" role="cell">
+                    <button
+                      type="button"
+                      className="document-table-action"
+                      disabled={isProcessing}
+                    >
+                      {document.action}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );

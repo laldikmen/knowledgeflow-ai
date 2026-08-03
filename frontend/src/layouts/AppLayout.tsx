@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Sidebar } from '../components/Sidebar';
+import React, { useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
+import { Sidebar } from '../components/Sidebar';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -16,14 +16,38 @@ interface AppLayoutProps {
   onSearch?: (query: string) => void;
 }
 
+interface HeaderConfig {
+  title: string;
+  subtitle?: string;
+  searchPlaceholder?: string;
+  actionLabel?: string;
+  actionIcon?: 'plus' | 'upload';
+  showNotifications: boolean;
+  onAction?: () => void;
+}
+
 const pageRoutes: Record<string, string> = {
-  'dashboard': '/dashboard',
-  'projects': '/projects',
-  'documents': '/documents',
-  'upload': '/upload',
+  dashboard: '/dashboard',
+  projects: '/projects',
+  documents: '/documents',
+  upload: '/upload',
   'action-tracker': '/action-tracker',
   'ai-chat': '/ai-chat',
-  'timeline': '/timeline',
+  timeline: '/timeline',
+};
+
+const pageTitles: Record<string, string> = {
+  upload: 'Upload Center',
+  'ai-chat': 'AI Chat Assistant',
+  timeline: 'Project Timeline',
+};
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 };
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -41,18 +65,97 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const currentPage = useMemo(() => {
     const path = location.pathname;
+
     for (const [page, route] of Object.entries(pageRoutes)) {
-      if (path === route || path.startsWith(route + '/')) {
+      if (path === route || path.startsWith(`${route}/`)) {
         return page;
       }
     }
+
     return 'dashboard';
   }, [location.pathname]);
+
+  const headerConfig = useMemo<HeaderConfig>(() => {
+    if (currentPage === 'dashboard') {
+      return {
+        title: `${getGreeting()}, ${userName}`,
+        subtitle: `${itemsNeedingReview.count} items need your review across ${itemsNeedingReview.projects} projects`,
+        searchPlaceholder: 'Search knowledge...',
+        actionLabel: 'Upload',
+        actionIcon: 'plus',
+        showNotifications: true,
+        onAction: () => navigate('/upload'),
+      };
+    }
+
+    if (currentPage === 'projects') {
+      return {
+        title: 'Projects',
+        subtitle: '6 projects across 4 departments',
+        searchPlaceholder: 'Search projects...',
+        actionLabel: 'Create Project',
+        actionIcon: 'plus',
+        showNotifications: false,
+      };
+    }
+
+    if (currentPage === 'documents') {
+      return {
+        title: 'Documents & Meetings',
+        subtitle: 'Project Alpha · 8 files',
+        searchPlaceholder: 'Search files...',
+        actionLabel: 'Upload',
+        actionIcon: 'upload',
+        showNotifications: false,
+        onAction: () => navigate('/upload'),
+      };
+    }
+
+    if (currentPage === 'upload') {
+      return {
+        title: 'Upload Center',
+        subtitle: 'Add a document or meeting transcript, then start AI processing',
+        showNotifications: false,
+      };
+    }
+
+    return {
+      title: pageTitles[currentPage] ?? 'KnowledgeFlow AI',
+      showNotifications: false,
+    };
+  }, [
+    currentPage,
+    itemsNeedingReview.count,
+    itemsNeedingReview.projects,
+    navigate,
+    userName,
+  ]);
 
   const handleNavigate = (page: string) => {
     const route = pageRoutes[page] || '/dashboard';
     navigate(route);
     setIsMobileMenuOpen(false);
+  };
+
+  const handleSearch = (query: string) => {
+    const searchParams = new URLSearchParams(location.search);
+
+    if (query.trim()) {
+      searchParams.set('q', query);
+    } else {
+      searchParams.delete('q');
+    }
+
+    const nextSearch = searchParams.toString();
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch ? `?${nextSearch}` : '',
+      },
+      { replace: true },
+    );
+
+    onSearch?.(query);
   };
 
   const handleLogout = () => {
@@ -74,16 +177,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           />
         </div>
 
-        <div className="app-main">
-          <Header
-            userName={userName}
-            itemsNeedingReview={itemsNeedingReview}
-            onSearch={onSearch}
-          />
-          {children}
-        </div>
-      </div>
+        <main className="app-main">
+          {currentPage !== 'action-tracker' && (
+            <Header
+              key={currentPage}
+              title={headerConfig.title}
+              subtitle={headerConfig.subtitle}
+              searchPlaceholder={headerConfig.searchPlaceholder}
+              actionLabel={headerConfig.actionLabel}
+              actionIcon={headerConfig.actionIcon}
+              showNotifications={headerConfig.showNotifications}
+              onSearch={handleSearch}
+              onAction={headerConfig.onAction}
+            />
+          )}
 
+          {children}
+        </main>
+      </div>
     </div>
   );
 };

@@ -1,239 +1,447 @@
-import React, { useState } from 'react';
-import { Card } from '../components/Card';
-import { Button } from '../components/Button';
+import React, { useMemo, useState } from 'react';
 import './ActionTracker.css';
+
+type TaskStatus = 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
+type TaskRisk = 'low' | 'medium' | 'high';
+type ProjectFilter = 'all' | 'alpha' | 'beta';
+
+interface ProjectOption {
+  id: Exclude<ProjectFilter, 'all'>;
+  shortName: string;
+  fullName: string;
+  totalTasks: number;
+}
 
 interface Task {
   id: number;
   title: string;
-  project: string;
-  owner: string;
+  projectId: Exclude<ProjectFilter, 'all'>;
+  projectName: string;
   ownerInitials: string;
-  dueDate: string;
-  status: 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
-  priority: 'low' | 'medium' | 'high';
-  risk?: 'low' | 'medium' | 'high';
+  ownerName: string;
+  dueDate?: string;
+  status: TaskStatus;
+  risk?: TaskRisk;
+  overdue?: boolean;
 }
 
-export const ActionTracker: React.FC = () => {
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
-  const [filterStatus, setFilterStatus] = useState<'all' | Task['status']>('all');
+interface BoardColumn {
+  status: TaskStatus;
+  label: string;
+  tasks: Task[];
+}
 
-  const tasks: Task[] = [
-    {
-      id: 1,
-      title: 'Prepare frontend wireframe',
-      project: 'Project Alpha',
-      owner: 'Inci',
-      ownerInitials: 'I',
-      dueDate: 'Jul 8, 2026',
-      status: 'in-progress',
-      priority: 'high',
-      risk: 'high',
-    },
-    {
-      id: 2,
-      title: 'Create upload API',
-      project: 'Project Alpha',
-      owner: 'Jordan Lee',
-      ownerInitials: 'JL',
-      dueDate: 'Jul 20',
-      status: 'confirmed',
-      priority: 'medium',
-    },
-    {
-      id: 3,
-      title: 'Setup S3 buckets',
-      project: 'Project Alpha',
-      owner: 'Alex Morgan',
-      ownerInitials: 'AM',
-      dueDate: 'Jul 22',
-      status: 'confirmed',
-      priority: 'low',
-    },
-    {
-      id: 4,
-      title: 'Define API schema',
-      project: 'Project Alpha',
-      owner: 'Alex Morgan',
-      ownerInitials: 'AM',
-      dueDate: 'Jul 9',
-      status: 'completed',
-      priority: 'high',
-    },
-    {
-      id: 5,
-      title: 'Write API integration tests',
-      project: 'Project Alpha',
-      owner: 'Jordan Lee',
-      ownerInitials: 'JL',
-      dueDate: 'Jul 24',
-      status: 'confirmed',
-      priority: 'medium',
-    },
-    {
-      id: 6,
-      title: 'Evaluate Azure Blob',
-      project: 'Project Alpha',
-      owner: 'Alex Morgan',
-      ownerInitials: 'AM',
-      dueDate: 'Jul 15',
-      status: 'cancelled',
-      priority: 'low',
-    },
-  ];
+interface ActionTrackerProps {
+  currentUserName?: string;
+}
 
-  const filteredTasks = filterStatus === 'all' ? tasks : tasks.filter(t => t.status === filterStatus);
+const PROJECTS: ProjectOption[] = [
+  {
+    id: 'alpha',
+    shortName: 'Alpha',
+    fullName: 'Project Alpha',
+    totalTasks: 42,
+  },
+  {
+    id: 'beta',
+    shortName: 'Beta',
+    fullName: 'Project Beta',
+    totalTasks: 18,
+  },
+];
 
-  const getStatusColor = (status: Task['status']) => {
-    const colors: Record<Task['status'], string> = {
-      draft: '#e0e0e0',
-      confirmed: '#fff3e0',
-      'in-progress': '#e3f2fd',
-      completed: '#e8f5e9',
-      cancelled: '#ffebee',
-    };
-    return colors[status];
-  };
+const TASKS: Task[] = [
+  {
+    id: 1,
+    title: 'Prepare frontend wireframe',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'I',
+    ownerName: 'Inci',
+    status: 'draft',
+    risk: 'high',
+  },
+  {
+    id: 2,
+    title: 'Draft API rate-limit policy',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'JL',
+    ownerName: 'Jordan Lee',
+    status: 'draft',
+    risk: 'low',
+  },
+  {
+    id: 3,
+    title: 'Create upload API',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'I',
+    ownerName: 'Inci',
+    dueDate: 'Jul 20',
+    status: 'confirmed',
+    risk: 'medium',
+  },
+  {
+    id: 4,
+    title: 'Set up S3 buckets',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'JL',
+    ownerName: 'Jordan Lee',
+    dueDate: 'Jul 22',
+    status: 'confirmed',
+    risk: 'low',
+  },
+  {
+    id: 5,
+    title: 'Prepare frontend wireframe',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'I',
+    ownerName: 'Inci',
+    dueDate: 'Jul 8',
+    status: 'in-progress',
+    risk: 'high',
+    overdue: true,
+  },
+  {
+    id: 6,
+    title: 'Write API integration tests',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'JL',
+    ownerName: 'Jordan Lee',
+    dueDate: 'Jul 24',
+    status: 'in-progress',
+    risk: 'medium',
+  },
+  {
+    id: 7,
+    title: 'Define API schema',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'I',
+    ownerName: 'Inci',
+    status: 'completed',
+    risk: 'medium',
+  },
+  {
+    id: 8,
+    title: 'Storage vendor review',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'AM',
+    ownerName: 'Alex Morgan',
+    status: 'completed',
+    risk: 'low',
+  },
+  {
+    id: 9,
+    title: 'Evaluate Azure Blob',
+    projectId: 'alpha',
+    projectName: 'Project Alpha',
+    ownerInitials: 'JL',
+    ownerName: 'Jordan Lee',
+    status: 'cancelled',
+    risk: 'low',
+  },
+  {
+    id: 10,
+    title: 'Review vendor SLA',
+    projectId: 'beta',
+    projectName: 'Project Beta',
+    ownerInitials: 'AM',
+    ownerName: 'Alex Morgan',
+    status: 'draft',
+    risk: 'high',
+  },
+  {
+    id: 11,
+    title: 'Define data-retention rules',
+    projectId: 'beta',
+    projectName: 'Project Beta',
+    ownerInitials: 'I',
+    ownerName: 'Inci',
+    dueDate: 'Jul 25',
+    status: 'confirmed',
+    risk: 'medium',
+  },
+  {
+    id: 12,
+    title: 'Migrate audit logs',
+    projectId: 'beta',
+    projectName: 'Project Beta',
+    ownerInitials: 'AM',
+    ownerName: 'Alex Morgan',
+    dueDate: 'Jul 10',
+    status: 'in-progress',
+    risk: 'high',
+    overdue: true,
+  },
+  {
+    id: 13,
+    title: 'Approve CRM access matrix',
+    projectId: 'beta',
+    projectName: 'Project Beta',
+    ownerInitials: 'JL',
+    ownerName: 'Jordan Lee',
+    status: 'completed',
+    risk: 'low',
+  },
+];
 
-  const getStatusLabel = (status: Task['status']) => {
-    const labels: Record<Task['status'], string> = {
-      draft: 'Draft',
-      confirmed: 'Confirmed',
-      'in-progress': 'In Progress',
-      completed: 'Completed',
-      cancelled: 'Cancelled',
-    };
-    return labels[status];
-  };
+const COLUMN_LABELS: Record<TaskStatus, string> = {
+  draft: 'Draft',
+  confirmed: 'Confirmed',
+  'in-progress': 'In Progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
 
-  const getPriorityColor = (priority: Task['priority']) => {
-    const colors: Record<Task['priority'], string> = {
-      low: '#4CAF50',
-      medium: '#FFC107',
-      high: '#F44336',
-    };
-    return colors[priority];
-  };
+const BOARD_STATUSES: TaskStatus[] = [
+  'draft',
+  'confirmed',
+  'in-progress',
+  'completed',
+  'cancelled',
+];
 
-  const getBoardColumns = () => {
-    const statuses: Task['status'][] = ['draft', 'confirmed', 'in-progress', 'completed'];
-    return statuses.map(status => ({
+export const ActionTracker: React.FC<ActionTrackerProps> = ({
+  currentUserName = 'Alex Morgan',
+}) => {
+  const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
+  const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('alpha');
+  const [highRiskOnly, setHighRiskOnly] = useState(false);
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+
+  const visibleTasks = useMemo(() => {
+    return TASKS.filter((task) => {
+      const matchesProject =
+        selectedProjectId === 'all' || task.projectId === selectedProjectId;
+      const matchesRisk = !highRiskOnly || task.risk === 'high';
+      const matchesAssignee = !assignedToMe || task.ownerName === currentUserName;
+      const matchesOverdue = !overdueOnly || task.overdue === true;
+
+      return matchesProject && matchesRisk && matchesAssignee && matchesOverdue;
+    });
+  }, [assignedToMe, currentUserName, highRiskOnly, overdueOnly, selectedProjectId]);
+
+  const boardColumns = useMemo<BoardColumn[]>(() => {
+    return BOARD_STATUSES.map((status) => ({
       status,
-      label: getStatusLabel(status),
-      tasks: tasks.filter(t => t.status === status),
+      label: COLUMN_LABELS[status],
+      tasks: visibleTasks.filter((task) => task.status === status),
     }));
+  }, [visibleTasks]);
+
+  const selectedProject = PROJECTS.find((project) => project.id === selectedProjectId);
+  const allProjectTaskCount = PROJECTS.reduce(
+    (total, project) => total + project.totalTasks,
+    0,
+  );
+
+  const pageSubtitle =
+    selectedProjectId === 'all'
+      ? `${allProjectTaskCount} tasks across ${PROJECTS.length} projects`
+      : `${selectedProject?.fullName ?? 'Project'} · ${selectedProject?.totalTasks ?? 0} tasks`;
+
+  const renderRisk = (risk?: TaskRisk) => {
+    if (!risk) return null;
+
+    return (
+      <span className={`tracker-priority tracker-priority--${risk}`}>
+        <span className="tracker-priority-dot" />
+        {risk.charAt(0).toUpperCase() + risk.slice(1)}
+      </span>
+    );
   };
+
+  const renderTaskCard = (task: Task) => (
+    <article
+      key={task.id}
+      className={`tracker-task-card tracker-task-card--${task.status} ${
+        task.overdue ? 'tracker-task-card--overdue' : ''
+      }`}
+    >
+      {task.overdue && (
+        <div className="tracker-overdue-label">
+          <span className="tracker-overdue-dot" />
+          Overdue
+        </div>
+      )}
+
+      <h3 className="tracker-task-title">{task.title}</h3>
+
+      <div className="tracker-task-meta">
+        <span className="tracker-avatar" title={task.ownerName}>
+          {task.ownerInitials}
+        </span>
+
+        {task.dueDate && (
+          <span className={task.overdue ? 'tracker-date tracker-date--overdue' : 'tracker-date'}>
+            {task.dueDate}
+          </span>
+        )}
+
+        {renderRisk(task.risk)}
+
+        {task.status === 'completed' && (
+          <span className="tracker-state-pill tracker-state-pill--completed">Completed</span>
+        )}
+
+        {task.status === 'cancelled' && (
+          <span className="tracker-state-pill tracker-state-pill--cancelled">Cancelled</span>
+        )}
+      </div>
+
+      {task.status === 'draft' && (
+        <div className="tracker-draft-actions">
+          <button type="button" className="tracker-draft-action tracker-draft-action--confirm">
+            Confirm
+          </button>
+          <button type="button" className="tracker-draft-action tracker-draft-action--reject">
+            Reject
+          </button>
+        </div>
+      )}
+    </article>
+  );
 
   return (
     <div className="action-tracker">
-      <div className="tracker-header">
+      <div className="tracker-page-header">
         <div>
-          <h2>Action Tracker</h2>
-          <p className="tracker-subtitle">{filteredTasks.length} tasks</p>
+          <h1>Action Tracker</h1>
+          <p>{pageSubtitle}</p>
         </div>
-        <div className="tracker-controls">
-          <div className="view-toggle">
-            <button
-              className={`toggle-btn ${viewMode === 'board' ? 'active' : ''}`}
-              onClick={() => setViewMode('board')}
-            >
-              Board
-            </button>
-            <button
-              className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-              onClick={() => setViewMode('list')}
-            >
-              List
-            </button>
-          </div>
+
+        <div className="tracker-view-toggle" aria-label="Action tracker view">
+          <button
+            type="button"
+            className={viewMode === 'board' ? 'active' : ''}
+            aria-pressed={viewMode === 'board'}
+            onClick={() => setViewMode('board')}
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'table' ? 'active' : ''}
+            aria-pressed={viewMode === 'table'}
+            onClick={() => setViewMode('table')}
+          >
+            Table
+          </button>
         </div>
       </div>
 
-      <Card className="tracker-filters">
-        <div className="filter-chips">
-          {(['all', 'draft', 'confirmed', 'in-progress', 'completed'] as const).map(status => (
-            <button
-              key={status}
-              className={`chip ${filterStatus === status ? 'active' : ''}`}
-              onClick={() => setFilterStatus(status)}
-            >
-              {status === 'all' ? 'All Tasks' : getStatusLabel(status as Task['status'])}
-            </button>
-          ))}
-        </div>
-      </Card>
+      <div className="tracker-filter-row" aria-label="Action tracker filters">
+        <label className="tracker-project-filter">
+          <span className="tracker-visually-hidden">Filter by project</span>
+          <select
+            value={selectedProjectId}
+            onChange={(event) => setSelectedProjectId(event.target.value as ProjectFilter)}
+            aria-label="Filter tasks by project"
+          >
+            <option value="all">Project: All</option>
+            {PROJECTS.map((project) => (
+              <option key={project.id} value={project.id}>
+                Project: {project.shortName}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          className={`tracker-filter ${highRiskOnly ? 'tracker-filter--active' : ''}`}
+          aria-pressed={highRiskOnly}
+          onClick={() => setHighRiskOnly((current) => !current)}
+        >
+          Risk: high
+        </button>
+
+        <button
+          type="button"
+          className={`tracker-filter ${assignedToMe ? 'tracker-filter--active' : ''}`}
+          aria-pressed={assignedToMe}
+          onClick={() => setAssignedToMe((current) => !current)}
+        >
+          Assigned to me
+        </button>
+
+        <button
+          type="button"
+          className={`tracker-filter tracker-filter--overdue ${overdueOnly ? 'active' : ''}`}
+          aria-pressed={overdueOnly}
+          onClick={() => setOverdueOnly((current) => !current)}
+        >
+          Overdue only
+        </button>
+      </div>
 
       {viewMode === 'board' ? (
         <div className="tracker-board">
-          {getBoardColumns().map(column => (
-            <div key={column.status} className="board-column">
-              <div className="column-header">
-                <h3>{column.label}</h3>
-                <span className="column-count">{column.tasks.length}</span>
+          {boardColumns.map((column) => (
+            <section key={column.status} className={`tracker-column tracker-column--${column.status}`}>
+              <div className="tracker-column-header">
+                <div className="tracker-column-title-wrap">
+                  <span className={`tracker-column-dot tracker-column-dot--${column.status}`} />
+                  <h2>{column.label}</h2>
+                </div>
+                <span className="tracker-column-count">{column.tasks.length}</span>
               </div>
-              <div className="column-tasks">
-                {column.tasks.map(task => (
-                  <div
-                    key={task.id}
-                    className="task-card"
-                    style={{ borderTopColor: getPriorityColor(task.priority) }}
-                  >
-                    <div className="task-header">
-                      <h4 className="task-title">{task.title}</h4>
-                      <span
-                        className="priority-dot"
-                        style={{ backgroundColor: getPriorityColor(task.priority) }}
-                        title={task.priority}
-                      />
-                    </div>
-                    <p className="task-project">{task.project}</p>
-                    <div className="task-footer">
-                      <div className="task-owner">
-                        <div className="avatar" title={task.owner}>
-                          {task.ownerInitials}
-                        </div>
-                        <span>{task.owner}</span>
-                      </div>
-                      <span className="task-date">{task.dueDate}</span>
-                    </div>
-                  </div>
-                ))}
+
+              <div className="tracker-column-tasks">
+                {column.tasks.map(renderTaskCard)}
+
+                {column.status === 'cancelled' && column.tasks.length > 0 && (
+                  <div className="tracker-empty-card">No other cancelled tasks</div>
+                )}
+
+                {column.tasks.length === 0 && (
+                  <div className="tracker-empty-card">No matching tasks</div>
+                )}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       ) : (
-        <div className="tracker-list">
-          {filteredTasks.map(task => (
-            <div key={task.id} className="list-item">
-              <div className="list-item-content">
-                <div className="list-item-header">
-                  <h4 className="task-title">{task.title}</h4>
-                  <span
-                    className="status-badge"
-                    style={{ backgroundColor: getStatusColor(task.status) }}
-                  >
-                    {getStatusLabel(task.status)}
-                  </span>
-                </div>
-                <p className="task-meta">
-                  {task.project} • Due {task.dueDate}
-                </p>
-              </div>
-              <div className="list-item-actions">
-                <span
-                  className="priority-dot"
-                  style={{ backgroundColor: getPriorityColor(task.priority) }}
-                  title={task.priority}
-                />
-                <div className="avatar">{task.ownerInitials}</div>
-                <Button variant="secondary" size="small">
-                  View
-                </Button>
-              </div>
-            </div>
-          ))}
+        <div className="tracker-table-wrap">
+          <table className="tracker-table">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Assignee</th>
+                <th>Due date</th>
+                <th>Risk</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleTasks.length > 0 ? (
+                visibleTasks.map((task) => (
+                  <tr key={task.id}>
+                    <td>{task.title}</td>
+                    <td>{task.projectName}</td>
+                    <td>{COLUMN_LABELS[task.status]}</td>
+                    <td>{task.ownerName}</td>
+                    <td>{task.dueDate ?? '—'}</td>
+                    <td>{task.risk ? renderRisk(task.risk) : '—'}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="tracker-table-empty">
+                    No tasks match the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -84,9 +84,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         </div>
       </div>
 
-      <footer className="app-footer">
-        <p>&copy; 2026 KnowledgeFlow AI. All rights reserved.</p>
-      </footer>
     </div>
   );
 };

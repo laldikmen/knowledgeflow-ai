@@ -1,15 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { StatCard } from '../components/StatCard';
-import { Card } from '../components/Card';
-import { ActivityItem } from '../components/ActivityItem';
+import React, { useEffect, useState } from 'react';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading data from API
-    setTimeout(() => setIsLoading(false), 500);
+    const timer = setTimeout(() => setIsLoading(false), 500);
+
+    return () => clearTimeout(timer);
   }, []);
 
   if (isLoading) {
@@ -18,131 +16,226 @@ export const Dashboard: React.FC = () => {
 
   const recentActivities = [
     {
-      avatar: { initials: 'AM', name: 'Alex Morgan' },
+      avatar: 'AM',
+      name: 'Alex',
       action: 'confirmed decision',
-      actionHighlight: 'Use Amazon S3 for storage',
+      highlight: 'Use Amazon S3 for storage',
+      details: 'Project Alpha',
       timestamp: '22m ago',
-      status: { type: 'confirmed', label: 'Confirmed' },
-      details: 'Project Alpha',
+      status: 'Confirmed',
+      statusType: 'confirmed',
     },
     {
-      avatar: { initials: 'AI', name: 'AI' },
+      avatar: 'AI',
+      name: 'AI',
       action: 'finished processing',
-      actionHighlight: 'Project Alpha Weekly Meeting',
-      timestamp: '3 hours ago',
-      status: { type: 'draft', label: '6 drafts' },
-      details: '3 action items • 2 decisions extracted • In ago',
+      highlight: 'Project Alpha Weekly Meeting',
+      details: '3 action items · 2 decisions extracted',
+      timestamp: '1h ago',
+      status: '6 drafts',
+      statusType: 'draft',
     },
     {
-      avatar: { initials: 'JL', name: 'Jordan Lopez' },
+      avatar: 'JL',
+      name: 'Jordan',
       action: 'started task',
-      actionHighlight: 'Create upload API',
-      timestamp: '2h ago',
-      status: { type: 'in-progress', label: 'In Progress' },
+      highlight: 'Create upload API',
       details: 'Project Alpha',
+      timestamp: '2h ago',
+      status: 'In Progress',
+      statusType: 'in-progress',
     },
     {
-      avatar: { initials: 'II', name: 'Inci' },
+      avatar: 'I',
+      name: 'Inci',
       action: 'uploaded',
-      actionHighlight: 'API Design v2.pdf',
-      timestamp: '4h ago',
-      status: { type: 'processed', label: 'Processed' },
+      highlight: 'API Design v2.pdf',
       details: 'Project Alpha',
+      timestamp: '4h ago',
+      status: 'Processed',
+      statusType: 'processed',
+    },
+  ];
+
+  const risks = [
+    {
+      name: 'Project Alpha',
+      level: 'Medium',
+      type: 'medium',
+      width: '52%',
+    },
+    {
+      name: 'Project Beta',
+      level: 'High',
+      type: 'high',
+      width: '84%',
+    },
+    {
+      name: 'Onboarding Revamp',
+      level: 'Low',
+      type: 'low',
+      width: '24%',
     },
   ];
 
   return (
     <div className="dashboard">
-      {/* Stats Grid */}
       <div className="dashboard-stats">
-        <StatCard
-          title="Recent uploads (7d)"
-          value="12"
-          badge={{ status: 'pending', count: 4 }}
-        />
-        <StatCard
-          title="Confirmed tasks"
-          value="24"
-          subtitle="pending"
-        />
-        <StatCard
-          title="In progress"
-          value="9"
-        />
-        <StatCard
-          title="Overdue tasks"
-          value="3"
-          dark={true}
-          badge={{ status: 'pending', label: 'needs action' }}
-        />
-        <StatCard
-          title="Upcoming deadlines (7d)"
-          value="5"
-        />
-        <StatCard
-          title="Draft tasks to review"
-          value="6"
-          highlighted={true}
-          badge={{ status: 'pending', label: 'Manager' }}
-        />
-        <StatCard
-          title="High-risk projects"
-          value="2"
-        />
+        <article className="dashboard-stat-card">
+          <div className="dashboard-stat-title">Recent uploads (7d)</div>
+          <span className="dashboard-stat-badge dashboard-stat-badge--green">
+            +4
+          </span>
+          <div className="dashboard-stat-value">12</div>
+        </article>
+
+        <article className="dashboard-stat-card">
+          <div className="dashboard-stat-title">Confirmed tasks</div>
+          <div className="dashboard-stat-value-row">
+            <div className="dashboard-stat-value">24</div>
+            <span className="dashboard-stat-subtitle">pending</span>
+          </div>
+        </article>
+
+        <article className="dashboard-stat-card">
+          <div className="dashboard-stat-title">In progress</div>
+          <span className="dashboard-stat-badge dashboard-stat-badge--green">
+            +2
+          </span>
+          <div className="dashboard-stat-value">9</div>
+        </article>
+
+        <article className="dashboard-stat-card dashboard-stat-card--dark">
+          <div className="dashboard-stat-title">Overdue tasks</div>
+          <span className="dashboard-stat-badge dashboard-stat-badge--dark">
+            needs action
+          </span>
+          <div className="dashboard-stat-value">3</div>
+        </article>
+
+        <article className="dashboard-stat-card">
+          <div className="dashboard-stat-title">
+            Upcoming deadlines (7d)
+          </div>
+          <div className="dashboard-stat-value">5</div>
+        </article>
+
+        <article className="dashboard-stat-card dashboard-stat-card--yellow">
+          <div className="dashboard-stat-title">Draft tasks to review</div>
+          <span className="dashboard-stat-badge dashboard-stat-badge--manager">
+            Manager
+          </span>
+          <div className="dashboard-stat-value">6</div>
+        </article>
+
+        <article className="dashboard-stat-card">
+          <div className="dashboard-stat-title">High-risk projects</div>
+          <span className="dashboard-stat-badge dashboard-stat-badge--red">
+            +1
+          </span>
+          <div className="dashboard-stat-value">2</div>
+        </article>
+
+        <article className="dashboard-rbac-card">
+          <span className="dashboard-rbac-label">RBAC</span>
+          <p>
+            Viewer sees only the first five cards — “Draft to review” and
+            “Upload” are hidden.
+          </p>
+        </article>
       </div>
 
-      {/* Bottom Section - Recent Activity & Project Risk Overview */}
       <div className="dashboard-bottom">
-        {/* Recent Activity Section */}
-        <Card title="Recent activity" className="dashboard-activity">
-          {recentActivities.map((activity, index) => (
-            <ActivityItem
-              key={index}
-              avatar={activity.avatar}
-              action={activity.action}
-              actionHighlight={activity.actionHighlight}
-              timestamp={activity.timestamp}
-              status={activity.status}
-              details={activity.details}
-            />
-          ))}
-        </Card>
+        <section className="dashboard-panel dashboard-activity">
+          <div className="dashboard-panel-header">
+            <h2>Recent activity</h2>
+            <a href="#timeline">Timeline →</a>
+          </div>
 
-        {/* Project Risk Overview Section */}
-        <Card title="Project risk overview" className="dashboard-risk-overview">
-          <div className="risk-item">
-            <div className="risk-name">Project Alpha</div>
-            <div className="risk-bar">
-              <div className="risk-indicator medium" style={{ width: '60%' }}></div>
-            </div>
-            <div className="risk-level">Medium</div>
+          <div className="dashboard-activity-list">
+            {recentActivities.map((activity) => (
+              <div
+                className="dashboard-activity-row"
+                key={`${activity.name}-${activity.highlight}`}
+              >
+                <div
+                  className={`dashboard-activity-avatar ${
+                    activity.avatar === 'AI'
+                      ? 'dashboard-activity-avatar--ai'
+                      : ''
+                  }`}
+                >
+                  {activity.avatar}
+                </div>
+
+                <div className="dashboard-activity-content">
+                  <div className="dashboard-activity-text">
+                    <strong>{activity.name}</strong> {activity.action}{' '}
+                    <strong>“{activity.highlight}”</strong>
+                  </div>
+
+                  <div className="dashboard-activity-meta">
+                    {activity.details} · {activity.timestamp}
+                  </div>
+                </div>
+
+                <span
+                  className={`dashboard-activity-status dashboard-activity-status--${activity.statusType}`}
+                >
+                  {activity.status}
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="risk-item">
-            <div className="risk-name">Project Beta</div>
-            <div className="risk-bar">
-              <div className="risk-indicator high" style={{ width: '85%' }}></div>
-            </div>
-            <div className="risk-level">High</div>
+        </section>
+
+        <section className="dashboard-panel dashboard-risk-overview">
+          <div className="dashboard-panel-header">
+            <h2>Project risk overview</h2>
           </div>
-          <div className="risk-item">
-            <div className="risk-name">Onboarding Revamp</div>
-            <div className="risk-bar">
-              <div className="risk-indicator low" style={{ width: '35%' }}></div>
-            </div>
-            <div className="risk-level">Low</div>
+
+          <div className="dashboard-risk-list">
+            {risks.map((risk) => (
+              <div className="dashboard-risk-item" key={risk.name}>
+                <div className="dashboard-risk-heading">
+                  <span>{risk.name}</span>
+
+                  <span
+                    className={`dashboard-risk-badge dashboard-risk-badge--${risk.type}`}
+                  >
+                    <span className="dashboard-risk-dot" />
+                    {risk.level}
+                  </span>
+                </div>
+
+                <div className="dashboard-risk-bar">
+                  <div
+                    className={`dashboard-risk-indicator dashboard-risk-indicator--${risk.type}`}
+                    style={{ width: risk.width }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="risk-deadlines">
-            <div className="risk-deadline-title">Upcoming deadlines</div>
-            <div className="risk-deadline-item">
-              <div>Create upload API</div>
-              <div className="risk-deadline-date">Jul 20</div>
+
+          <div className="dashboard-deadlines">
+            <div className="dashboard-deadlines-title">
+              Upcoming deadlines
             </div>
-            <div className="risk-deadline-item overdue">
-              <div>Prepare frontend framwork</div>
-              <div className="risk-deadline-date">Overdue · Jul 8</div>
+
+            <div className="dashboard-deadline-row">
+              <span>Create upload API</span>
+              <span className="dashboard-deadline-date">Jul 20</span>
+            </div>
+
+            <div className="dashboard-deadline-row">
+              <span>Prepare frontend wireframe</span>
+              <span className="dashboard-deadline-overdue">
+                Overdue · Jul 8
+              </span>
             </div>
           </div>
-        </Card>
+        </section>
       </div>
     </div>
   );

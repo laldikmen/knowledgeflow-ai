@@ -1,5 +1,4 @@
 import React from 'react';
-import { Button } from './Button';
 import { Avatar } from './Avatar';
 
 interface SidebarItem {
@@ -41,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Logo */}
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon"></div>
+
         <div>
           <div className="sidebar-logo-text">KnowledgeFlow</div>
           <div className="sidebar-logo-text-small">AI</div>
@@ -50,11 +50,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation */}
       <div className="sidebar-section">
         <div className="sidebar-section-title">Workspace</div>
+
         <nav className="sidebar-nav">
           {NAVIGATION_ITEMS.map((item) => (
             <button
               key={item.id}
-              className={`sidebar-nav-item ${currentPage === item.id ? 'active' : ''}`}
+              className={`sidebar-nav-item ${
+                currentPage === item.id ? 'active' : ''
+              }`}
               onClick={() => onNavigate(item.id)}
             >
               <span className="sidebar-nav-icon">{item.icon}</span>
@@ -64,24 +67,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
       </div>
 
-      {/* Settings */}
-      <div className="sidebar-section">
-        <button className="sidebar-nav-item" onClick={() => onNavigate('settings')}>
+      {/* Settings and User */}
+      <div className="sidebar-bottom">
+        <button
+          className={`sidebar-nav-item ${
+            currentPage === 'settings' ? 'active' : ''
+          }`}
+          onClick={() => onNavigate('settings')}
+        >
           <span className="sidebar-nav-icon">⚙️</span>
           <span>Settings</span>
         </button>
-      </div>
 
-      {/* User Info */}
-      <div className="sidebar-user" onClick={onLogout}>
-        <Avatar
-          initials={userInitials}
-          name={userName}
-          size="small"
-        />
-        <div className="sidebar-user-info">
-          <div className="sidebar-user-name">{userName}</div>
-          <div className="sidebar-user-role">{userRole}</div>
+        <div className="sidebar-user" onClick={onLogout}>
+          <Avatar
+            initials={userInitials}
+            name={userName}
+            size="small"
+          />
+
+          <div className="sidebar-user-info">
+            <div className="sidebar-user-name">{userName}</div>
+            <div className="sidebar-user-role">{userRole}</div>
+          </div>
         </div>
       </div>
     </div>

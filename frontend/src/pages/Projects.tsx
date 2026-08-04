@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import './Projects.css';
 
@@ -107,6 +108,7 @@ const hasProjectCardData = (value: unknown): value is Project[] => {
 };
 
 export const Projects: React.FC = () => {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeDepartment, setActiveDepartment] = useState('All departments');
   const [isLoading, setIsLoading] = useState(true);
@@ -166,7 +168,20 @@ export const Projects: React.FC = () => {
       {filteredProjects.length > 0 ? (
         <div className="projects-grid">
           {filteredProjects.map((project) => (
-            <article className="project-card" key={project.id}>
+            <article
+              className="project-card"
+              key={project.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${project.name}`}
+              onClick={() => navigate(`/projects/${project.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigate(`/projects/${project.id}`);
+                }
+              }}
+            >
               <div className="project-card-header">
                 <div>
                   <h2 className="project-name">{project.name}</h2>

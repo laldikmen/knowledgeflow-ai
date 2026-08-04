@@ -250,3 +250,8 @@
     min-height: 210px;
   }
 }
+
+.project-card:focus-visible {
+  outline: 3px solid rgba(243, 206, 75, 0.4);
+  outline-offset: 3px;
+}

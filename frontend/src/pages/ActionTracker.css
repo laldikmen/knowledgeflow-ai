@@ -505,3 +505,28 @@
   color: #999286 !important;
   text-align: center !important;
 }
+
+
+/* Task-detail navigation */
+.tracker-task-card {
+  cursor: pointer;
+}
+
+.tracker-task-card:focus-visible {
+  outline: 2px solid #d0a915;
+  outline-offset: 3px;
+}
+
+.tracker-table tbody tr {
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.tracker-table tbody tr:hover {
+  background: rgba(255, 250, 235, 0.72);
+}
+
+.tracker-table tbody tr:focus-visible {
+  outline: 2px solid #d0a915;
+  outline-offset: -2px;
+}

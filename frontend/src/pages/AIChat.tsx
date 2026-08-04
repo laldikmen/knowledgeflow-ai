@@ -1,191 +1,533 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Input } from '../components/Input';
-import { Button } from '../components/Button';
-import { Card } from '../components/Card';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './AIChat.css';
+
+interface ChatSource {
+  title: string;
+  meta?: string;
+}
 
 interface ChatMessage {
   id: number;
   type: 'user' | 'assistant';
   content: string;
-  timestamp: string;
-  sources?: string[];
+  emphasis?: string;
+  source?: ChatSource;
+  unavailable?: boolean;
 }
 
+interface ChatSession {
+  id: number;
+  projectId: string;
+  title: string;
+  time: string;
+  messages: ChatMessage[];
+}
+
+const projects = [
+  { id: 'alpha', name: 'Project Alpha' },
+  { id: 'beta', name: 'Project Beta' },
+  { id: 'migration', name: 'Data Migration' },
+];
+
+const initialSessions: ChatSession[] = [
+  {
+    id: 1,
+    projectId: 'alpha',
+    title: 'Decisions in Alpha meeting',
+    time: 'Just now',
+    messages: [
+      {
+        id: 101,
+        type: 'user',
+        content: 'What decisions were made in the Project Alpha meeting?',
+      },
+      {
+        id: 102,
+        type: 'assistant',
+        content:
+          'One decision was confirmed in the Project Alpha Weekly Meeting: the team will use Amazon S3 for document storage as the simplest path for the MVP.',
+        emphasis: 'the team will use Amazon S3 for document storage',
+        source: {
+          title: 'Project Alpha Weekly Meeting',
+          meta: 'Decision · 04:18 · confidence 0.95',
+        },
+      },
+      {
+        id: 103,
+        type: 'user',
+        content: "What's the Q3 marketing budget?",
+      },
+      {
+        id: 104,
+        type: 'assistant',
+        content: 'I could not find this information in the documents available to your account.',
+        unavailable: true,
+      },
+    ],
+  },
+  {
+    id: 2,
+    projectId: 'alpha',
+    title: 'Who owns the upload API?',
+    time: 'Yesterday',
+    messages: [
+      {
+        id: 201,
+        type: 'user',
+        content: 'Who owns the upload API task?',
+      },
+      {
+        id: 202,
+        type: 'assistant',
+        content: 'The upload API task is assigned to Jordan Lee and is currently marked In Progress.',
+        emphasis: 'Jordan Lee',
+        source: {
+          title: 'Action Tracker Board',
+          meta: 'Task · Upload API · In Progress',
+        },
+      },
+    ],
+  },
+  {
+    id: 3,
+    projectId: 'beta',
+    title: 'Beta project risks',
+    time: 'Monday',
+    messages: [
+      {
+        id: 301,
+        type: 'user',
+        content: 'What are the main risks in Project Beta?',
+      },
+      {
+        id: 302,
+        type: 'assistant',
+        content:
+          'The current Project Beta notes identify dependency delays and incomplete acceptance criteria as the main risks.',
+        emphasis: 'dependency delays and incomplete acceptance criteria',
+        source: {
+          title: 'Project Beta Status Review',
+          meta: 'Risk summary · confidence 0.91',
+        },
+      },
+    ],
+  },
+  {
+    id: 4,
+    projectId: 'migration',
+    title: 'Migration milestones',
+    time: 'Last week',
+    messages: [
+      {
+        id: 401,
+        type: 'user',
+        content: 'What is the next migration milestone?',
+      },
+      {
+        id: 402,
+        type: 'assistant',
+        content: 'The next milestone is completion of the staging-data validation cycle.',
+        emphasis: 'completion of the staging-data validation cycle',
+        source: {
+          title: 'Data Migration Plan',
+          meta: 'Milestone · Phase 2',
+        },
+      },
+    ],
+  },
+];
+
+const renderMessageText = (message: ChatMessage) => {
+  if (!message.emphasis || !message.content.includes(message.emphasis)) {
+    return message.content;
+  }
+
+  const [before, after] = message.content.split(message.emphasis);
+
+  return (
+    <>
+      {before}
+      <strong>{message.emphasis}</strong>
+      {after}
+    </>
+  );
+};
+
+const createSessionTitle = (question: string) =>
+  question.length > 34 ? `${question.slice(0, 34).trim()}…` : question;
+
 export const AIChat: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      type: 'assistant',
-      content:
-        'Welcome! I\'m the KnowledgeFlow AI Assistant. I can help you search through your project documents, answer questions about decisions made, find action items, and more. What would you like to know?',
-      timestamp: new Date().toLocaleTimeString(),
-    },
-  ]);
+  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
+  const [activeSessionId, setActiveSessionId] = useState<number>(1);
+  const [selectedProject, setSelectedProject] = useState('alpha');
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [selectedProject, setSelectedProject] = useState('all');
 
-  const projects = [
-    { id: 'all', name: 'All Projects' },
-    { id: 'alpha', name: 'Project Alpha' },
-    { id: 'beta', name: 'Project Beta' },
-    { id: 'migration', name: 'Data Migration' },
-  ];
+  const selectedProjectName = useMemo(
+    () => projects.find(project => project.id === selectedProject)?.name ?? 'Project Alpha',
+    [selectedProject],
+  );
+
+  const projectSessions = useMemo(
+    () => sessions.filter(session => session.projectId === selectedProject),
+    [sessions, selectedProject],
+  );
+
+  const activeSession = useMemo(
+    () => projectSessions.find(session => session.id === activeSessionId) ?? null,
+    [projectSessions, activeSessionId],
+  );
+
+  const messages = activeSession?.messages ?? [];
+
+  useEffect(() => {
+    if (activeSession) return;
+
+    const firstSession = projectSessions[0];
+    if (firstSession) {
+      setActiveSessionId(firstSession.id);
+      return;
+    }
+
+    setActiveSessionId(0);
+  }, [activeSession, projectSessions]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading]);
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  const buildAssistantResponse = (
+    question: string,
+    projectName: string,
+  ): Omit<ChatMessage, 'id' | 'type'> => {
+    const normalized = question.toLowerCase();
+
+    if (normalized.includes('budget') || normalized.includes('marketing')) {
+      return {
+        content: 'I could not find this information in the documents available to your account.',
+        unavailable: true,
+      };
+    }
+
+    if (normalized.includes('upload') || normalized.includes('api')) {
+      return {
+        content: 'The upload API task is assigned to Jordan Lee and is currently marked In Progress.',
+        emphasis: 'Jordan Lee',
+        source: {
+          title: 'Action Tracker Board',
+          meta: 'Task · Upload API · In Progress',
+        },
+      };
+    }
+
+    if (normalized.includes('overdue') || normalized.includes('action item')) {
+      return {
+        content: `${projectName} currently has three overdue action items. The highest-priority item is the frontend wireframe assigned to Inci.`,
+        emphasis: 'three overdue action items',
+        source: {
+          title: 'Action Tracker Board',
+          meta: `Tasks · ${projectName}`,
+        },
+      };
+    }
+
+    return {
+      content: `One decision was confirmed in the ${projectName} meeting: the team will use Amazon S3 for document storage as the simplest path for the MVP.`,
+      emphasis: 'the team will use Amazon S3 for document storage',
+      source: {
+        title: `${projectName} Weekly Meeting`,
+        meta: 'Decision · 04:18 · confidence 0.95',
+      },
+    };
+  };
+
+  const handleProjectChange = (projectId: string) => {
+    setSelectedProject(projectId);
+    setInputValue('');
+    setIsLoading(false);
+
+    const firstSessionForProject = sessions.find(session => session.projectId === projectId);
+    setActiveSessionId(firstSessionForProject?.id ?? 0);
+  };
+
+  const handleSelectSession = (sessionId: number) => {
+    setActiveSessionId(sessionId);
+    setInputValue('');
+    setIsLoading(false);
+  };
+
+  const handleSendMessage = () => {
+    const question = inputValue.trim();
+    if (!question || isLoading) return;
 
     const userMessage: ChatMessage = {
-      id: messages.length + 1,
+      id: Date.now(),
       type: 'user',
-      content: inputValue,
-      timestamp: new Date().toLocaleTimeString(),
+      content: question,
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    let targetSessionId = activeSession?.id;
+
+    if (!targetSessionId) {
+      targetSessionId = Date.now() + 1;
+      const newSession: ChatSession = {
+        id: targetSessionId,
+        projectId: selectedProject,
+        title: createSessionTitle(question),
+        time: 'Just now',
+        messages: [userMessage],
+      };
+
+      setSessions(previous => [
+        newSession,
+        ...previous.map(session =>
+          session.projectId === selectedProject && session.time === 'Just now'
+            ? { ...session, time: 'Earlier today' }
+            : session,
+        ),
+      ]);
+      setActiveSessionId(targetSessionId);
+    } else {
+      setSessions(previous =>
+        previous.map(session => {
+          if (session.id !== targetSessionId) return session;
+
+          const shouldRename = session.title === 'New conversation' && session.messages.length === 0;
+
+          return {
+            ...session,
+            title: shouldRename ? createSessionTitle(question) : session.title,
+            time: 'Just now',
+            messages: [...session.messages, userMessage],
+          };
+        }),
+      );
+    }
+
+    const responseSessionId = targetSessionId;
+    const responseProjectName = selectedProjectName;
+
     setInputValue('');
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        {
-          content:
-            'Based on the Project Alpha Weekly Meeting, the team decided to use Amazon S3 for document storage as it\'s the simplest path for the MVP. You should find the meeting transcript in your Documents section for more details.',
-          sources: ['Project Alpha Weekly Meeting', 'MVP Scope.docx'],
-        },
-        {
-          content:
-            'There are currently 3 high-priority action items in Project Alpha: 1) Prepare frontend wireframe (Inci, due Jul 8), 2) Create upload API (Jordan Lee, due Jul 20), and 3) Define API schema (Alex Morgan, due Jul 9).',
-          sources: ['Action Tracker Board'],
-        },
-        {
-          content:
-            'The upload API endpoints should handle PDF, Word, PowerPoint, and meeting transcript files. The maximum file size is 50 MB per file, and we\'re using AWS S3 with CloudFront for distribution.',
-          sources: ['API Design v2.pdf', 'Project Alpha Weekly Meeting'],
-        },
-      ];
+    window.setTimeout(() => {
+      const response = buildAssistantResponse(question, responseProjectName);
 
-      const response = responses[Math.floor(Math.random() * responses.length)];
-
-      const assistantMessage: ChatMessage = {
-        id: messages.length + 2,
-        type: 'assistant',
-        content: response.content,
-        timestamp: new Date().toLocaleTimeString(),
-        sources: response.sources,
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      setSessions(previous =>
+        previous.map(session =>
+          session.id === responseSessionId
+            ? {
+                ...session,
+                messages: [
+                  ...session.messages,
+                  {
+                    id: Date.now() + 2,
+                    type: 'assistant',
+                    ...response,
+                  },
+                ],
+              }
+            : session,
+        ),
+      );
       setIsLoading(false);
-    }, 1000);
+    }, 800);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleNewChat = () => {
+    const nextId = Date.now();
+
+    const newSession: ChatSession = {
+      id: nextId,
+      projectId: selectedProject,
+      title: 'New conversation',
+      time: 'Just now',
+      messages: [],
+    };
+
+    setSessions(previous => [
+      newSession,
+      ...previous.map(session =>
+        session.projectId === selectedProject && session.time === 'Just now'
+          ? { ...session, time: 'Earlier today' }
+          : session,
+      ),
+    ]);
+    setActiveSessionId(nextId);
+    setInputValue('');
+    setIsLoading(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSendMessage();
     }
   };
 
   return (
-    <div className="ai-chat">
-      <div className="chat-header">
-        <div>
-          <h2>AI Chat Assistant</h2>
-          <p className="chat-subtitle">Ask questions about your projects and documents</p>
+    <section className="kf-chat-page" aria-label="Knowledge Assistant">
+      <aside className="kf-chat-rail">
+        <div className="kf-chat-scope">
+          <label htmlFor="chat-project">Scope</label>
+          <div className="kf-chat-select-wrap">
+            <select
+              id="chat-project"
+              value={selectedProject}
+              onChange={event => handleProjectChange(event.target.value)}
+            >
+              {projects.map(project => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m8 10 4 4 4-4" />
+            </svg>
+          </div>
         </div>
 
-        <div className="chat-project-filter">
-          <select
-            value={selectedProject}
-            onChange={e => setSelectedProject(e.target.value)}
-            className="project-select"
-          >
-            {projects.map(project => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
+        <button type="button" className="kf-chat-new" onClick={handleNewChat}>
+          <span aria-hidden="true">+</span>
+          New chat
+        </button>
+
+        <div className="kf-chat-history">
+          <p className="kf-chat-rail-label">History</p>
+          <div className="kf-chat-history-list">
+            {projectSessions.map(session => (
+              <button
+                type="button"
+                key={session.id}
+                className={`kf-chat-history-item ${
+                  activeSessionId === session.id ? 'is-active' : ''
+                }`}
+                onClick={() => handleSelectSession(session.id)}
+              >
+                <span>{session.title}</span>
+                <small>{session.time}</small>
+              </button>
             ))}
-          </select>
-        </div>
-      </div>
 
-      <div className="chat-container">
-        <div className="chat-messages">
-          {messages.map(message => (
-            <div key={message.id} className={`message ${message.type}`}>
-              <div className="message-avatar">
-                {message.type === 'user' ? 'You' : 'AI'}
+            {projectSessions.length === 0 && (
+              <p className="kf-chat-history-empty">No conversations yet.</p>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      <div className="kf-chat-workspace">
+        <header className="kf-chat-workspace-header">
+          <div className="kf-chat-brand-mark" aria-hidden="true">
+            <span />
+          </div>
+          <div>
+            <h1>Knowledge Assistant</h1>
+            <p>Searching documents in {selectedProjectName}</p>
+          </div>
+        </header>
+
+        <div className="kf-chat-thread">
+          {messages.length === 0 && (
+            <div className="kf-chat-empty-state">
+              <div className="kf-chat-brand-mark" aria-hidden="true">
+                <span />
               </div>
-              <div className="message-content">
-                <p>{message.content}</p>
-                {message.sources && message.sources.length > 0 && (
-                  <div className="message-sources">
-                    <span className="sources-label">Sources:</span>
-                    {message.sources.map((source, idx) => (
-                      <a key={idx} href="#" className="source-link">
-                        {source}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <span className="message-time">{message.timestamp}</span>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="message assistant">
-              <div className="message-avatar">AI</div>
-              <div className="message-content typing">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
+              <h2>Start a new conversation</h2>
+              <p>Ask a question about the documents, decisions, or tasks in {selectedProjectName}.</p>
             </div>
           )}
+
+          {messages.map(message => (
+            <article
+              key={message.id}
+              className={`kf-chat-message kf-chat-message--${message.type}`}
+            >
+              {message.type === 'user' ? (
+                <div className="kf-chat-user-bubble">{message.content}</div>
+              ) : (
+                <div
+                  className={`kf-chat-assistant-card ${
+                    message.unavailable ? 'kf-chat-assistant-card--compact' : ''
+                  }`}
+                >
+                  {message.unavailable && (
+                    <span className="kf-chat-answer-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="6" />
+                        <path d="m16 16 4 4" />
+                      </svg>
+                    </span>
+                  )}
+
+                  <div className="kf-chat-answer-content">
+                    <p className={message.unavailable ? 'kf-chat-unavailable-text' : ''}>
+                      {renderMessageText(message)}
+                    </p>
+
+                    {message.source && (
+                      <div className="kf-chat-source-block">
+                        <span className="kf-chat-source-label">Source</span>
+                        <button type="button" className="kf-chat-source-card">
+                          <span className="kf-chat-source-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="7" />
+                              <path d="M12 8v4l3 2" />
+                            </svg>
+                          </span>
+                          <span>
+                            <strong>{message.source.title}</strong>
+                            {message.source.meta && <small>{message.source.meta}</small>}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </article>
+          ))}
+
+          {isLoading && (
+            <article className="kf-chat-message kf-chat-message--assistant">
+              <div className="kf-chat-assistant-card kf-chat-assistant-card--typing">
+                <span />
+                <span />
+                <span />
+              </div>
+            </article>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
-        <Card className="chat-input-area">
-          <div className="chat-suggestions">
-            <p className="suggestions-title">Try asking:</p>
-            <div className="suggestion-chips">
-              <button className="suggestion-chip">What decisions were made in Project Alpha?</button>
-              <button className="suggestion-chip">What are the overdue action items?</button>
-              <button className="suggestion-chip">Who owns the upload API task?</button>
-            </div>
-          </div>
-
-          <div className="chat-input-group">
+        <div className="kf-chat-composer-wrap">
+          <div className="kf-chat-composer">
             <textarea
-              className="chat-input"
-              placeholder="Ask about your documents, decisions, or tasks..."
               value={inputValue}
-              onChange={e => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              rows={3}
+              onChange={event => setInputValue(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your documents..."
+              rows={1}
+              aria-label="Ask about your documents"
             />
-            <Button
-              variant="primary"
+            <button
+              type="button"
+              className="kf-chat-send"
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || isLoading}
+              aria-label="Send message"
             >
-              Send
-            </Button>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h13" />
+                <path d="m13 6 6 6-6 6" />
+              </svg>
+            </button>
           </div>
-
-          <p className="chat-note">
-            💡 I can only access documents and information from the projects you have access to.
-          </p>
-        </Card>
+        </div>
       </div>
-    </div>
+    </section>
   );
 };

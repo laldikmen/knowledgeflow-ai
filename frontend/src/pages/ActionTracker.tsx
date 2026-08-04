@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './ActionTracker.css';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 
 type TaskStatus = 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
 type TaskRisk = 'low' | 'medium' | 'high';
@@ -210,14 +212,21 @@ const BOARD_STATUSES: TaskStatus[] = [
 export const ActionTracker: React.FC<ActionTrackerProps> = ({
   currentUserName = 'Alex Morgan',
 }) => {
+  const navigate = useNavigate();
+  const [tasks, setTasks] = useState<Task[]>(TASKS);
   const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('alpha');
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    type: 'confirm' | 'reject';
+    taskId: number;
+  } | null>(null);
+  const [actionReason, setActionReason] = useState('');
 
   const visibleTasks = useMemo(() => {
-    return TASKS.filter((task) => {
+    return tasks.filter((task) => {
       const matchesProject =
         selectedProjectId === 'all' || task.projectId === selectedProjectId;
       const matchesRisk = !highRiskOnly || task.risk === 'high';
@@ -226,7 +235,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
 
       return matchesProject && matchesRisk && matchesAssignee && matchesOverdue;
     });
-  }, [assignedToMe, currentUserName, highRiskOnly, overdueOnly, selectedProjectId]);
+  }, [assignedToMe, currentUserName, highRiskOnly, overdueOnly, selectedProjectId, tasks]);
 
   const boardColumns = useMemo<BoardColumn[]>(() => {
     return BOARD_STATUSES.map((status) => ({
@@ -264,6 +273,16 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
       className={`tracker-task-card tracker-task-card--${task.status} ${
         task.overdue ? 'tracker-task-card--overdue' : ''
       }`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open task: ${task.title}`}
+      onClick={() => navigate(`/tasks/${task.id}`)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          navigate(`/tasks/${task.id}`);
+        }
+      }}
     >
       {task.overdue && (
         <div className="tracker-overdue-label">
@@ -298,16 +317,59 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
 
       {task.status === 'draft' && (
         <div className="tracker-draft-actions">
-          <button type="button" className="tracker-draft-action tracker-draft-action--confirm">
+          <button
+            type="button"
+            className="tracker-draft-action tracker-draft-action--confirm"
+            onClick={(event) => {
+              event.stopPropagation();
+              setActionReason('');
+              setPendingAction({ type: 'confirm', taskId: task.id });
+            }}
+          >
             Confirm
           </button>
-          <button type="button" className="tracker-draft-action tracker-draft-action--reject">
+          <button
+            type="button"
+            className="tracker-draft-action tracker-draft-action--reject"
+            onClick={(event) => {
+              event.stopPropagation();
+              setActionReason('');
+              setPendingAction({ type: 'reject', taskId: task.id });
+            }}
+          >
             Reject
           </button>
         </div>
       )}
     </article>
   );
+
+  const pendingTask = pendingAction
+    ? tasks.find((task) => task.id === pendingAction.taskId) ?? null
+    : null;
+
+  const closeConfirmation = () => {
+    setPendingAction(null);
+    setActionReason('');
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingAction || !pendingTask) return;
+
+    if (pendingAction.type === 'confirm') {
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === pendingTask.id ? { ...task, status: 'confirmed' } : task,
+        ),
+      );
+    } else {
+      setTasks((current) =>
+        current.filter((task) => task.id !== pendingTask.id),
+      );
+    }
+
+    closeConfirmation();
+  };
 
   return (
     <div className="action-tracker">
@@ -424,7 +486,18 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
             <tbody>
               {visibleTasks.length > 0 ? (
                 visibleTasks.map((task) => (
-                  <tr key={task.id}>
+                  <tr
+                    key={task.id}
+                    tabIndex={0}
+                    aria-label={`Open task: ${task.title}`}
+                    onClick={() => navigate(`/tasks/${task.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/tasks/${task.id}`);
+                      }
+                    }}
+                  >
                     <td>{task.title}</td>
                     <td>{task.projectName}</td>
                     <td>{COLUMN_LABELS[task.status]}</td>
@@ -444,6 +517,45 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
           </table>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={Boolean(pendingAction && pendingTask)}
+        title={
+          pendingAction?.type === 'reject'
+            ? 'Reject this action item?'
+            : 'Confirm this action item?'
+        }
+        description={
+          pendingTask ? (
+            pendingAction?.type === 'reject' ? (
+              <p>
+                “{pendingTask.title}” will be marked <strong>Rejected</strong> and
+                will not become a tracked task. It will remain available in the
+                source document history.
+              </p>
+            ) : (
+              <p>
+                “{pendingTask.title}” will become a <strong>Confirmed</strong>{' '}
+                task in {pendingTask.projectName} and can then be started by its
+                owner.
+              </p>
+            )
+          ) : null
+        }
+        confirmLabel={pendingAction?.type === 'reject' ? 'Reject item' : 'Confirm task'}
+        cancelLabel="Back"
+        tone={pendingAction?.type === 'reject' ? 'danger' : 'default'}
+        inputLabel={pendingAction?.type === 'reject' ? 'Reason (optional)' : undefined}
+        inputPlaceholder={
+          pendingAction?.type === 'reject'
+            ? 'Duplicate of an existing task...'
+            : undefined
+        }
+        inputValue={actionReason}
+        onInputChange={setActionReason}
+        onClose={closeConfirmation}
+        onConfirm={confirmPendingAction}
+      />
     </div>
   );
 };

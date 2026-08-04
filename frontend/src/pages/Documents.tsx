@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './Documents.css';
 
 type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
@@ -76,6 +76,7 @@ const DocumentIcon: React.FC<{ type: DocumentType; failed?: boolean }> = ({
 };
 
 export const Documents: React.FC = () => {
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | DocumentType>('all');
@@ -167,6 +168,20 @@ export const Documents: React.FC = () => {
     });
   }, [documents, filterType, searchQuery]);
 
+  const openDocument = (documentId: number) => {
+    navigate(`/documents/${documentId}`);
+  };
+
+  const handleDocumentKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    documentId: number,
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openDocument(documentId);
+    }
+  };
+
   if (isLoading) {
     return <div className="documents documents-loading">Loading documents...</div>;
   }
@@ -226,6 +241,10 @@ export const Documents: React.FC = () => {
                   key={document.id}
                   className={`document-table-row ${isFailed ? 'document-table-row--failed' : ''}`}
                   role="row"
+                  tabIndex={0}
+                  aria-label={`Open ${document.name}`}
+                  onClick={() => openDocument(document.id)}
+                  onKeyDown={(event) => handleDocumentKeyDown(event, document.id)}
                 >
                   <div className="document-table-name-cell" role="cell">
                     <DocumentIcon type={document.type} failed={isFailed} />
@@ -270,6 +289,10 @@ export const Documents: React.FC = () => {
                       type="button"
                       className="document-table-action"
                       disabled={isProcessing}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openDocument(document.id);
+                      }}
                     >
                       {document.action}
                     </button>

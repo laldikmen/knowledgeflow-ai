@@ -135,14 +135,6 @@ export const Dashboard: React.FC = () => {
           </span>
           <div className="dashboard-stat-value">2</div>
         </article>
-
-        <article className="dashboard-rbac-card">
-          <span className="dashboard-rbac-label">RBAC</span>
-          <p>
-            Viewer sees only the first five cards — “Draft to review” and
-            “Upload” are hidden.
-          </p>
-        </article>
       </div>
 
       <div className="dashboard-bottom">

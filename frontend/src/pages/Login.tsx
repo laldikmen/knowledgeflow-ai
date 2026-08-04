@@ -15,6 +15,28 @@ interface LoginProps {
   onLogin: (authData: AuthUser) => void;
 }
 
+const getMockUser = (email: string): Omit<AuthUser, 'token' | 'email'> => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const isAdminEmail =
+    normalizedEmail === 'admin@acme.com' ||
+    normalizedEmail === 'sam.rivera@acme.com' ||
+    normalizedEmail.includes('admin');
+
+  if (isAdminEmail) {
+    return {
+      name: 'Sam Rivera',
+      role: 'System Administrator',
+      initials: 'SR',
+    };
+  }
+
+  return {
+    name: 'Alex Morgan',
+    role: 'Project Manager',
+    initials: 'AM',
+  };
+};
+
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,24 +61,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with actual API call to /login endpoint
-      // const response = await fetch('/api/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email, password })
-      // });
-      // const data = await response.json();
+      // TODO: Replace with the real /auth/login API call.
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Mock authentication - replace with real API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Mock user data based on email
+      const mockProfile = getMockUser(email);
       const mockUser: AuthUser = {
-        token: 'mock-jwt-token-' + Math.random().toString(36).substr(2, 9),
-        email,
-        name: 'Alex Morgan',
-        role: 'Project Manager',
-        initials: 'AM',
+        token: `mock-jwt-token-${Math.random().toString(36).slice(2, 11)}`,
+        email: email.trim().toLowerCase(),
+        ...mockProfile,
       };
 
       onLogin(mockUser);
@@ -70,13 +82,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="login-page">
       <div className="login-container">
-        {/* Logo */}
         <div className="login-logo">
-          <div className="login-logo-icon"></div>
+          <div className="login-logo-icon" />
           <span className="login-logo-text">KnowledgeFlow AI</span>
         </div>
 
-        {/* Form Card */}
         <div className="login-card">
           <h2 className="login-title">Welcome back</h2>
           <p className="login-subtitle">Sign in to your knowledge workspace</p>
@@ -128,20 +138,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </Button>
           </form>
 
-          {/* SSO Divider */}
           <div className="login-divider">
             <span>SSO</span>
           </div>
 
-          {/* SSO Button */}
           <Button
             variant="secondary"
             size="large"
             fullWidth
-            onClick={() => {
-              // TODO: Implement SSO login
-              console.log('SSO Login clicked');
-            }}
+            onClick={() => console.log('SSO Login clicked')}
           >
             Continue with Acme SSO
           </Button>

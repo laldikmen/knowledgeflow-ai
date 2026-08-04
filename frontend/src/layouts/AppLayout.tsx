@@ -34,12 +34,16 @@ const pageRoutes: Record<string, string> = {
   'action-tracker': '/action-tracker',
   'ai-chat': '/ai-chat',
   timeline: '/timeline',
+  'user-management': '/users',
+  settings: '/settings',
 };
 
 const pageTitles: Record<string, string> = {
   upload: 'Upload Center',
   'ai-chat': 'AI Chat Assistant',
   timeline: 'Project Timeline',
+  'user-management': 'User Management',
+  settings: 'Settings',
 };
 
 const getGreeting = () => {
@@ -62,9 +66,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isProjectDetail = /^\/projects\/[^/]+\/?$/.test(location.pathname);
+  const isDocumentDetail = /^\/documents\/[^/]+\/?$/.test(location.pathname);
+  const isTaskDetail = /^\/tasks\/[^/]+\/?$/.test(location.pathname);
 
   const currentPage = useMemo(() => {
     const path = location.pathname;
+
+    if (isTaskDetail) return 'action-tracker';
 
     for (const [page, route] of Object.entries(pageRoutes)) {
       if (path === route || path.startsWith(`${route}/`)) {
@@ -73,7 +82,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
 
     return 'dashboard';
-  }, [location.pathname]);
+  }, [isTaskDetail, location.pathname]);
 
   const headerConfig = useMemo<HeaderConfig>(() => {
     if (currentPage === 'dashboard') {
@@ -165,7 +174,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   return (
     <div className="app">
-      <div className={`app-layout ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+      <div
+        className={`app-layout ${isMobileMenuOpen ? 'mobile-open' : ''} ${
+          currentPage === 'ai-chat' ? 'app-layout--ai-chat' : ''
+        }`}
+      >
         <div className="app-sidebar">
           <Sidebar
             currentPage={currentPage}
@@ -177,8 +190,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           />
         </div>
 
-        <main className="app-main">
-          {currentPage !== 'action-tracker' && (
+        <main
+          className={`app-main ${currentPage === 'ai-chat' ? 'app-main--ai-chat' : ''}`}
+        >
+          {currentPage !== 'action-tracker' &&
+            currentPage !== 'ai-chat' &&
+            currentPage !== 'timeline' &&
+            currentPage !== 'user-management' &&
+            currentPage !== 'settings' &&
+            !isProjectDetail &&
+            !isDocumentDetail && (
             <Header
               key={currentPage}
               title={headerConfig.title}

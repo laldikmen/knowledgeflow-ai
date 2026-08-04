@@ -36,6 +36,17 @@
   --accent-border: rgba(243, 206, 75, 0.3);
   --shadow: rgba(0, 0, 0, 0.08) 0 4px 12px, rgba(0, 0, 0, 0.04) 0 2px 4px;
   --shadow-lg: rgba(0, 0, 0, 0.12) 0 8px 24px, rgba(0, 0, 0, 0.06) 0 4px 8px;
+  --app-background:
+    radial-gradient(
+      ellipse 70% 65% at 10% 10%,
+      rgba(255, 221, 93, 0.5) 0%,
+      rgba(255, 233, 151, 0.36) 34%,
+      rgba(255, 245, 211, 0.12) 58%,
+      transparent 60%
+    ),
+    linear-gradient(110deg, #f1ede1 0%, #f1ede2 48%, #f6ecc8 100%);
+  --sidebar-background: rgba(255, 255, 255, 0.48);
+  --sidebar-border: rgba(228, 223, 212, 0.7);
 
   /* Typography */
   --sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -168,4 +179,47 @@ pre {
   padding: var(--sp-md);
   overflow-x: auto;
   margin: var(--sp-md) 0;
+}
+
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --gold: #f3ce4b;
+  --bg-beige: #24221e;
+  --dark-brown: #181713;
+  --white: #302e2a;
+  --light-gray: #777168;
+  --border-light: #4b4841;
+
+  --text: #f1eee7;
+  --text-secondary: #b7b0a5;
+  --text-tertiary: #817b71;
+  --bg: #24221e;
+  --border: #4b4841;
+  --card-bg: #302e2a;
+  --accent-bg: rgba(243, 206, 75, 0.09);
+  --accent-border: rgba(243, 206, 75, 0.24);
+  --shadow: rgba(0, 0, 0, 0.3) 0 4px 12px, rgba(0, 0, 0, 0.18) 0 2px 4px;
+  --shadow-lg: rgba(0, 0, 0, 0.42) 0 8px 24px, rgba(0, 0, 0, 0.24) 0 4px 8px;
+  --app-background:
+    radial-gradient(
+      ellipse 70% 65% at 10% 10%,
+      rgba(124, 102, 25, 0.26) 0%,
+      rgba(84, 71, 29, 0.18) 34%,
+      rgba(42, 39, 31, 0.08) 58%,
+      transparent 60%
+    ),
+    linear-gradient(110deg, #211f1b 0%, #24221e 48%, #2a271f 100%);
+  --sidebar-background: rgba(43, 41, 36, 0.76);
+  --sidebar-border: rgba(86, 81, 72, 0.72);
+
+  --success-light: #2d3d2a;
+  --pending-light: #4a3e20;
+  --in-progress-light: #283746;
+  --error-light: #462a27;
+}
+
+:root[data-theme='dark'] body {
+  background: var(--bg);
 }

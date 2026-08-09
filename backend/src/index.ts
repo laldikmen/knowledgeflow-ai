@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './db/connection';
 import authRoutes from './routes/auth';
+import projectRoutes from './routes/projects';
+import documentRoutes from './routes/documents';
 
 dotenv.config();
 
@@ -16,6 +18,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/projects', projectRoutes);
+app.use('/documents', documentRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

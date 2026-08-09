@@ -7,6 +7,7 @@ import projectRoutes from './routes/projects';
 import documentRoutes from './routes/documents';
 import taskRoutes from './routes/tasks';
 import aiRoutes from './routes/ai';
+import dashboardRoutes from './routes/dashboard';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes);
 app.use('/tasks', taskRoutes);
 app.use('/ai', aiRoutes);
+app.use('/dashboard', dashboardRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

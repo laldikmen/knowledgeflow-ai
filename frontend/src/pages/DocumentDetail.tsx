@@ -526,14 +526,18 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         };
       }
 
-      return {
-        ...current,
-        decisions: current.decisions.map((decision) =>
-          decision.id === editingTarget.id
-            ? { ...decision, text: editText.trim(), status: 'draft' }
-            : decision,
-        ),
-      };
+      if (editingTarget.kind === 'decision') {
+        return {
+          ...current,
+          decisions: current.decisions.map((decision) =>
+            decision.id === editingTarget.id
+              ? { ...decision, text: editText.trim(), status: 'draft' }
+              : decision,
+          ),
+        };
+      }
+
+      return current;
     });
 
     setEditingTarget(null);

@@ -1,12 +1,10 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import AWS from 'aws-sdk';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: process.env.S3_REGION || 'us-east-1',
 });
 
 export const uploadDocument = async (req: Request, res: Response) => {
@@ -59,7 +57,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
 
     // Generate S3 key
     const fileExtension = req.file.originalname.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExtension}`;
+    const fileName = `${randomUUID()}.${fileExtension}`;
     const s3Key = `projects/${projectId}/documents/${fileName}`;
 
     // Upload to S3

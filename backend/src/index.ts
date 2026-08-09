@@ -5,6 +5,7 @@ import { pool } from './db/connection';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
 import documentRoutes from './routes/documents';
+import taskRoutes from './routes/tasks';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/auth', authRoutes);
 app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes);
+app.use('/tasks', taskRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

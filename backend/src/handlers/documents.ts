@@ -289,3 +289,75 @@ export const deleteDocument = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const setDocumentText = async (req: Request, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const { extracted_text } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated',
+      });
+    }
+
+    if (!extracted_text || !extracted_text.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Extracted text is required',
+      });
+    }
+
+    // Get document and check access
+    const docResult = await query(
+      `SELECT d.project_id FROM documents d WHERE d.id = $1`,
+      [documentId]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found',
+      });
+    }
+
+    const document = docResult.rows[0];
+
+    // Check access (admin/manager only)
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [document.project_id, req.user.id]
+    );
+
+    const isAdmin = req.user.system_role === 'admin';
+    const isManager = accessResult.rows.length > 0 && accessResult.rows[0].project_role === 'manager';
+
+    if (!isAdmin && !isManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins and managers can set document text',
+      });
+    }
+
+    // Store or update document text
+    await query(
+      `INSERT INTO document_texts (document_id, extracted_text)
+       VALUES ($1, $2)
+       ON CONFLICT (document_id) DO UPDATE SET extracted_text = $2`,
+      [documentId, extracted_text]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Document text stored successfully',
+    });
+  } catch (error) {
+    console.error('Set document text error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+};

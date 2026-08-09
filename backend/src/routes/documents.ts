@@ -5,6 +5,7 @@ import {
   getProjectDocuments,
   getDocumentDetail,
   deleteDocument,
+  setDocumentText,
 } from '../handlers/documents';
 import { verifyToken, requireProjectAccess } from '../middleware/auth';
 
@@ -21,6 +22,9 @@ router.use(verifyToken);
 
 // Upload document
 router.post('/upload', upload.single('file'), uploadDocument);
+
+// Set document extracted text (for AI processing)
+router.post('/:documentId/text', setDocumentText);
 
 // Get documents in project
 router.get('/project/:projectId', requireProjectAccess, getProjectDocuments);

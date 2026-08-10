@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
+import client from '../api/client';
 import './Login.css';
 
 interface AuthUser {
@@ -15,26 +16,12 @@ interface LoginProps {
   onLogin: (authData: AuthUser) => void;
 }
 
-const getMockUser = (email: string): Omit<AuthUser, 'token' | 'email'> => {
-  const normalizedEmail = email.trim().toLowerCase();
-  const isAdminEmail =
-    normalizedEmail === 'admin@acme.com' ||
-    normalizedEmail === 'sam.rivera@acme.com' ||
-    normalizedEmail.includes('admin');
-
-  if (isAdminEmail) {
-    return {
-      name: 'Sam Rivera',
-      role: 'System Administrator',
-      initials: 'SR',
-    };
+const extractInitials = (name: string): string => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length > 1) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   }
-
-  return {
-    name: 'Alex Morgan',
-    role: 'Project Manager',
-    initials: 'AM',
-  };
+  return parts[0]?.slice(0, 2).toUpperCase() || 'U';
 };
 
 export const Login: React.FC<LoginProps> = ({ onLogin }) => {
@@ -61,19 +48,23 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsLoading(true);
 
     try {
-      // TODO: Replace with the real /auth/login API call.
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const mockProfile = getMockUser(email);
-      const mockUser: AuthUser = {
-        token: `mock-jwt-token-${Math.random().toString(36).slice(2, 11)}`,
+      const response = await client.post('/auth/login', {
         email: email.trim().toLowerCase(),
-        ...mockProfile,
+        password,
+      });
+
+      const authData: AuthUser = {
+        token: response.data.token,
+        email: response.data.email,
+        name: response.data.name,
+        role: response.data.system_role,
+        initials: extractInitials(response.data.name),
       };
 
-      onLogin(mockUser);
-    } catch (err) {
-      setError('Failed to sign in. Please try again.');
+      onLogin(authData);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || 'Invalid email or password';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

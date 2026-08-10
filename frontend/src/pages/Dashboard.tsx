@@ -1,82 +1,51 @@
 import React, { useEffect, useState } from 'react';
+import client from '../api/client';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [risks, setRisks] = useState<any[]>([]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 500);
+    const fetchDashboardData = async () => {
+      try {
+        const activitiesResponse = await client.get('/dashboard/activity');
+        const activitiesData = activitiesResponse.data.map((activity: any) => ({
+          avatar: activity.avatar,
+          name: activity.name,
+          action: activity.action,
+          highlight: activity.highlight,
+          details: activity.details,
+          timestamp: activity.timestamp,
+          status: activity.status,
+          statusType: activity.status_type,
+        }));
+        setRecentActivities(activitiesData);
 
-    return () => clearTimeout(timer);
+        const risksResponse = await client.get('/dashboard/risks');
+        const risksData = risksResponse.data.map((risk: any) => ({
+          name: risk.name,
+          level: risk.level,
+          type: risk.type,
+          width: `${(risk.value || 50) * 100}%`,
+        }));
+        setRisks(risksData);
+      } catch (error) {
+        console.error('Failed to load dashboard data', error);
+        setRecentActivities([]);
+        setRisks([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
   }, []);
 
   if (isLoading) {
     return <div className="dashboard">Loading...</div>;
   }
-
-  const recentActivities = [
-    {
-      avatar: 'AM',
-      name: 'Alex',
-      action: 'confirmed decision',
-      highlight: 'Use Amazon S3 for storage',
-      details: 'Project Alpha',
-      timestamp: '22m ago',
-      status: 'Confirmed',
-      statusType: 'confirmed',
-    },
-    {
-      avatar: 'AI',
-      name: 'AI',
-      action: 'finished processing',
-      highlight: 'Project Alpha Weekly Meeting',
-      details: '3 action items · 2 decisions extracted',
-      timestamp: '1h ago',
-      status: '6 drafts',
-      statusType: 'draft',
-    },
-    {
-      avatar: 'JL',
-      name: 'Jordan',
-      action: 'started task',
-      highlight: 'Create upload API',
-      details: 'Project Alpha',
-      timestamp: '2h ago',
-      status: 'In Progress',
-      statusType: 'in-progress',
-    },
-    {
-      avatar: 'I',
-      name: 'Inci',
-      action: 'uploaded',
-      highlight: 'API Design v2.pdf',
-      details: 'Project Alpha',
-      timestamp: '4h ago',
-      status: 'Processed',
-      statusType: 'processed',
-    },
-  ];
-
-  const risks = [
-    {
-      name: 'Project Alpha',
-      level: 'Medium',
-      type: 'medium',
-      width: '52%',
-    },
-    {
-      name: 'Project Beta',
-      level: 'High',
-      type: 'high',
-      width: '84%',
-    },
-    {
-      name: 'Onboarding Revamp',
-      level: 'Low',
-      type: 'low',
-      width: '24%',
-    },
-  ];
 
   return (
     <div className="dashboard">

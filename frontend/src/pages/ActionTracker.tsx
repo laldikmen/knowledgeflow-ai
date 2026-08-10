@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import client from '../api/client';
 import './ActionTracker.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
@@ -213,7 +214,8 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
   currentUserName = 'Alex Morgan',
 }) => {
   const navigate = useNavigate();
-  const [tasks, setTasks] = useState<Task[]>(TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('alpha');
   const [highRiskOnly, setHighRiskOnly] = useState(false);
@@ -224,6 +226,39 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
     taskId: number;
   } | null>(null);
   const [actionReason, setActionReason] = useState('');
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const response = await client.get('/tasks');
+        const tasksData = response.data.map((task: any) => ({
+          id: task.id,
+          title: task.title,
+          projectId: task.project_id || 'alpha',
+          projectName: task.project_name,
+          ownerInitials: task.owner_name
+            .split(/\s+/)
+            .map((part: string) => part[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2),
+          ownerName: task.owner_name,
+          dueDate: task.deadline,
+          status: task.status || 'draft',
+          risk: task.risk_level || 'medium',
+          overdue: task.overdue_days && task.overdue_days > 0,
+        }));
+        setTasks(tasksData);
+      } catch (error) {
+        console.error('Failed to load tasks', error);
+        setTasks(TASKS);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
 
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -370,6 +405,10 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
 
     closeConfirmation();
   };
+
+  if (isLoading) {
+    return <div className="action-tracker">Loading tasks...</div>;
+  }
 
   return (
     <div className="action-tracker">

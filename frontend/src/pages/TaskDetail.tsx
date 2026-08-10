@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import client from '../api/client';
 import './TaskDetail.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TaskEditModal, type TaskEditValues } from '../components/TaskEditModal';
@@ -142,223 +143,6 @@ const buildHistory = (
   return history;
 };
 
-const makeTask = (
-  task: Omit<TaskDetailData, 'description' | 'sourceDocument' | 'sourceReference' | 'notes' | 'history'> &
-    Partial<Pick<TaskDetailData, 'description' | 'sourceDocument' | 'sourceReference' | 'notes'>>,
-): TaskDetailData => ({
-  ...task,
-  description:
-    task.description ??
-    `Complete “${task.title}” for ${task.projectName} and document the outcome for the project team.`,
-  sourceDocument: task.sourceDocument ?? 'Project Alpha Weekly Meeting',
-  sourceReference: task.sourceReference ?? 'Extracted 09:12 · confidence 0.88',
-  notes: task.notes ?? [],
-  history: buildHistory(task.status, task.ownerName),
-});
-
-const MOCK_TASKS: Record<number, TaskDetailData> = {
-  1: makeTask({
-    id: 1,
-    title: 'Prepare frontend wireframe',
-    description:
-      'Produce high-fidelity wireframes for the document ingestion and review flow. Cover upload, AI review, task tracking, and the main project workspace.',
-    projectName: 'Project Alpha',
-    ownerName: 'Inci',
-    ownerInitials: 'I',
-    deadline: 'Jul 8, 2026',
-    risk: 'high',
-    status: 'draft',
-    sourceDocumentId: 1,
-    sourceDocument: 'Project Alpha Weekly Meeting',
-    sourceReference: 'Extracted 09:12 · confidence 0.88',
-  }),
-  2: makeTask({
-    id: 2,
-    title: 'Draft API rate-limit policy',
-    projectName: 'Project Alpha',
-    ownerName: 'Jordan Lee',
-    ownerInitials: 'JL',
-    risk: 'low',
-    status: 'draft',
-    sourceDocumentId: 3,
-    sourceDocument: 'MVP Scope.docx',
-    sourceReference: 'Extracted from Section 5.1 · confidence 0.84',
-  }),
-  3: makeTask({
-    id: 3,
-    title: 'Create upload API',
-    description:
-      'Implement the document upload endpoint using Amazon S3 for file storage and Amazon RDS for document metadata.',
-    projectName: 'Project Alpha',
-    ownerName: 'Inci',
-    ownerInitials: 'I',
-    deadline: 'Jul 20, 2026',
-    risk: 'medium',
-    status: 'confirmed',
-    sourceDocumentId: 1,
-    sourceDocument: 'Project Alpha Weekly Meeting',
-    sourceReference: 'Extracted 09:12 · confidence 0.93',
-  }),
-  4: makeTask({
-    id: 4,
-    title: 'Set up S3 buckets',
-    projectName: 'Project Alpha',
-    ownerName: 'Jordan Lee',
-    ownerInitials: 'JL',
-    deadline: 'Jul 22, 2026',
-    risk: 'low',
-    status: 'confirmed',
-    sourceDocumentId: 3,
-    sourceDocument: 'MVP Scope.docx',
-    sourceReference: 'Extracted from infrastructure section · confidence 0.91',
-  }),
-  5: makeTask({
-    id: 5,
-    title: 'Prepare frontend wireframe',
-    description:
-      'Produce high-fidelity wireframes for the document ingestion and review flow, ready for the Project Alpha MVP demo. Cover upload, AI review, and the task board.',
-    projectName: 'Project Alpha',
-    ownerName: 'Inci',
-    ownerInitials: 'I',
-    deadline: 'Jul 8, 2026',
-    risk: 'high',
-    status: 'in-progress',
-    overdueDays: 11,
-    sourceDocumentId: 1,
-    sourceDocument: 'Project Alpha Weekly Meeting',
-    sourceReference: 'Extracted 09:12 · confidence 0.88',
-    notes: [
-      {
-        id: 1,
-        author: 'Inci',
-        initials: 'I',
-        text: 'Low-fidelity flows completed; refining the visual design and interactions.',
-        date: 'Jul 9',
-      },
-    ],
-  }),
-  6: makeTask({
-    id: 6,
-    title: 'Write API integration tests',
-    projectName: 'Project Alpha',
-    ownerName: 'Jordan Lee',
-    ownerInitials: 'JL',
-    deadline: 'Jul 24, 2026',
-    risk: 'medium',
-    status: 'in-progress',
-    sourceDocumentId: 2,
-    sourceDocument: 'API Design v2.pdf',
-    sourceReference: 'Page 6 · confidence 0.90',
-  }),
-  7: makeTask({
-    id: 7,
-    title: 'Define API schema',
-    projectName: 'Project Alpha',
-    ownerName: 'Inci',
-    ownerInitials: 'I',
-    risk: 'medium',
-    status: 'completed',
-    sourceDocumentId: 3,
-    sourceDocument: 'MVP Scope.docx',
-    sourceReference: 'Section 5.1 · confidence 0.94',
-    notes: [
-      {
-        id: 1,
-        author: 'Inci',
-        initials: 'I',
-        text: 'Main endpoints and role requirements documented.',
-        date: 'Jul 18',
-      },
-    ],
-  }),
-  8: makeTask({
-    id: 8,
-    title: 'Storage vendor review',
-    projectName: 'Project Alpha',
-    ownerName: 'Alex Morgan',
-    ownerInitials: 'AM',
-    risk: 'low',
-    status: 'completed',
-    sourceDocumentId: 1,
-    sourceDocument: 'Project Alpha Weekly Meeting',
-    sourceReference: 'Decision context 04:18 · confidence 0.89',
-  }),
-  9: makeTask({
-    id: 9,
-    title: 'Evaluate Azure Blob',
-    projectName: 'Project Alpha',
-    ownerName: 'Jordan Lee',
-    ownerInitials: 'JL',
-    risk: 'low',
-    status: 'cancelled',
-    sourceDocumentId: 1,
-    sourceDocument: 'Project Alpha Weekly Meeting',
-    sourceReference: 'Storage discussion · confidence 0.77',
-  }),
-  10: makeTask({
-    id: 10,
-    title: 'Review vendor SLA',
-    projectName: 'Project Beta',
-    ownerName: 'Alex Morgan',
-    ownerInitials: 'AM',
-    risk: 'high',
-    status: 'draft',
-    sourceDocument: 'Project Beta Vendor Review',
-    sourceReference: 'Extracted 13:30 · confidence 0.82',
-  }),
-  11: makeTask({
-    id: 11,
-    title: 'Define data-retention rules',
-    projectName: 'Project Beta',
-    ownerName: 'Inci',
-    ownerInitials: 'I',
-    deadline: 'Jul 25, 2026',
-    risk: 'medium',
-    status: 'confirmed',
-    sourceDocument: 'Project Beta Compliance Notes',
-    sourceReference: 'Section 3 · confidence 0.92',
-  }),
-  12: makeTask({
-    id: 12,
-    title: 'Migrate audit logs',
-    projectName: 'Project Beta',
-    ownerName: 'Alex Morgan',
-    ownerInitials: 'AM',
-    deadline: 'Jul 10, 2026',
-    risk: 'high',
-    status: 'in-progress',
-    overdueDays: 9,
-    sourceDocument: 'Project Beta Migration Plan',
-    sourceReference: 'Workstream 2 · confidence 0.90',
-  }),
-  13: makeTask({
-    id: 13,
-    title: 'Approve CRM access matrix',
-    projectName: 'Project Beta',
-    ownerName: 'Jordan Lee',
-    ownerInitials: 'JL',
-    risk: 'low',
-    status: 'completed',
-    sourceDocument: 'CRM Access Workshop',
-    sourceReference: 'Decision 07:42 · confidence 0.96',
-  }),
-  14: makeTask({
-    id: 14,
-    title: 'Define the human review workflow',
-    projectName: 'Project Alpha',
-    ownerName: 'Alex Morgan',
-    ownerInitials: 'AM',
-    deadline: 'Jul 12, 2026',
-    risk: 'medium',
-    status: 'draft',
-    sourceDocumentId: 3,
-    sourceDocument: 'MVP Scope.docx',
-    sourceReference: 'Section 5.1 · confidence 0.86',
-  }),
-};
-
-const cloneTask = (task: TaskDetailData): TaskDetailData =>
-  JSON.parse(JSON.stringify(task)) as TaskDetailData;
 
 const TaskStatusBadge: React.FC<{ status: TaskStatus }> = ({ status }) => (
   <span className={`task-detail-status task-detail-status--${status}`}>
@@ -374,17 +158,68 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const navigate = useNavigate();
   const { taskId } = useParams<{ taskId: string }>();
   const numericTaskId = Number(taskId);
-  const sourceTask = MOCK_TASKS[numericTaskId];
-  const [task, setTask] = useState<TaskDetailData | null>(() =>
-    sourceTask ? cloneTask(sourceTask) : null,
-  );
+  const [task, setTask] = useState<TaskDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [noteText, setNoteText] = useState('');
   const [pendingAction, setPendingAction] = useState<PendingTaskAction | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
-    setTask(sourceTask ? cloneTask(sourceTask) : null);
+    const fetchTask = async () => {
+      setIsLoading(true);
+      try {
+        const response = await client.get(`/tasks/${numericTaskId}`);
+        const data = response.data;
+
+        const extractInitials = (name: string): string => {
+          const parts = name.trim().split(/\s+/).filter(Boolean);
+          if (parts.length > 1) {
+            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+          }
+          return parts[0]?.slice(0, 2).toUpperCase() || 'U';
+        };
+
+        const taskData: TaskDetailData = {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          projectName: data.project_name,
+          ownerName: data.owner_name,
+          ownerInitials: extractInitials(data.owner_name),
+          deadline: data.deadline,
+          risk: data.risk_level || 'low',
+          status: data.status,
+          overdueDays: data.overdue_days,
+          sourceDocumentId: data.source_document_id,
+          sourceDocument: data.source_document_title || 'Source Document',
+          sourceReference: data.source_reference || 'Extracted from source',
+          sourceConfidence: data.confidence_score,
+          notes: data.notes?.map((note: any) => ({
+            id: note.id,
+            author: note.author,
+            initials: extractInitials(note.author),
+            text: note.text,
+            date: new Date(note.created_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            }),
+          })) || [],
+          history: buildHistory(data.status, data.owner_name),
+        };
+
+        setTask(taskData);
+      } catch (error) {
+        console.error('Failed to load task', error);
+        setTask(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (numericTaskId) {
+      fetchTask();
+    }
     setNoteText('');
     setPendingAction(null);
     setActionNote('');
@@ -397,13 +232,23 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const canViewHistory = canManage || isOwner;
 
 
+  if (isLoading) {
+    return (
+      <section className="task-detail task-detail-not-found">
+        <div className="task-detail-empty-card">
+          <h1>Loading task...</h1>
+        </div>
+      </section>
+    );
+  }
+
   if (!task) {
     return (
       <section className="task-detail task-detail-not-found">
         <div className="task-detail-empty-card">
           <span aria-hidden="true">?</span>
           <h1>Task not found</h1>
-          <p>The selected task does not exist in the current mock dataset.</p>
+          <p>The selected task does not exist.</p>
           <button type="button" className="task-detail-button task-detail-button--primary" onClick={() => navigate('/action-tracker')}>
             Back to Action Tracker
           </button>

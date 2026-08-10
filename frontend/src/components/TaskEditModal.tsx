@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import client from '../api/client';
 import './TaskEditModal.css';
 
 export type TaskRiskValue = 'low' | 'medium' | 'high';
@@ -29,18 +30,44 @@ const DEFAULT_PROJECTS = [
   'Mobile App v3',
 ];
 
-const DEFAULT_OWNERS = ['Inci', 'Alex Morgan', 'Jordan Lee', 'Maya Patel'];
-
 export const TaskEditModal: React.FC<TaskEditModalProps> = ({
   isOpen,
   initialValues,
   onClose,
   onSave,
-  projectOptions = DEFAULT_PROJECTS,
-  ownerOptions = DEFAULT_OWNERS,
+  projectOptions,
+  ownerOptions,
 }) => {
   const [form, setForm] = useState<TaskEditValues>(initialValues);
   const [error, setError] = useState('');
+  const [fetchedOwners, setFetchedOwners] = useState<string[]>([]);
+  const [fetchedProjects, setFetchedProjects] = useState<string[]>(DEFAULT_PROJECTS);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchData = async () => {
+      try {
+        const projectsResponse = await client.get('/projects');
+        const projects = projectsResponse.data.map((proj: any) => proj.name).filter(Boolean);
+        setFetchedProjects(projects.length > 0 ? projects : DEFAULT_PROJECTS);
+      } catch (error) {
+        console.error('Failed to load projects', error);
+        setFetchedProjects(DEFAULT_PROJECTS);
+      }
+
+      try {
+        const usersResponse = await client.get('/users');
+        const owners = usersResponse.data.map((user: any) => user.name).filter(Boolean);
+        setFetchedOwners(owners);
+      } catch (error) {
+        console.error('Failed to load users', error);
+        setFetchedOwners([]);
+      }
+    };
+
+    fetchData();
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -60,13 +87,13 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
   }, [isOpen, onClose]);
 
   const projects = useMemo(
-    () => Array.from(new Set([initialValues.projectName, ...projectOptions].filter(Boolean))),
-    [initialValues.projectName, projectOptions],
+    () => Array.from(new Set([initialValues.projectName, ...(projectOptions || fetchedProjects)].filter(Boolean))),
+    [initialValues.projectName, projectOptions, fetchedProjects],
   );
 
   const owners = useMemo(
-    () => Array.from(new Set([initialValues.owner, ...ownerOptions].filter(Boolean))),
-    [initialValues.owner, ownerOptions],
+    () => Array.from(new Set([initialValues.owner, ...(ownerOptions || fetchedOwners)].filter(Boolean))),
+    [initialValues.owner, ownerOptions, fetchedOwners],
   );
 
   if (!isOpen) return null;

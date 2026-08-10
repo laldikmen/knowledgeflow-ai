@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import client from '../api/client';
 import './ProjectDetail.css';
 
 type ProjectRole = 'Manager' | 'Contributor' | 'Viewer';
@@ -77,469 +78,8 @@ interface ProjectDetailProps {
   currentUserName?: string;
 }
 
-const ALPHA_MEMBERS: ProjectMember[] = [
-  {
-    id: 1,
-    name: 'Alex Morgan',
-    email: 'alex.morgan@acme.com',
-    initials: 'AM',
-    role: 'Manager',
-    avatarTone: 'sand',
-  },
-  {
-    id: 2,
-    name: 'Jordan Lee',
-    email: 'jordan.lee@acme.com',
-    initials: 'JL',
-    role: 'Contributor',
-    avatarTone: 'gold',
-  },
-  {
-    id: 3,
-    name: 'Inci',
-    email: 'inci@acme.com',
-    initials: 'I',
-    role: 'Contributor',
-    avatarTone: 'peach',
-  },
-  {
-    id: 4,
-    name: 'Maya Chen',
-    email: 'maya.chen@acme.com',
-    initials: 'MC',
-    role: 'Viewer',
-    avatarTone: 'sage',
-  },
-  {
-    id: 5,
-    name: 'Sam Rivera',
-    email: 'sam.rivera@acme.com',
-    initials: 'SR',
-    role: 'Viewer',
-    avatarTone: 'blue',
-  },
-];
 
-const buildDocuments = (
-  projectName: string,
-  meetingName: string,
-): ProjectDocument[] => [
-  {
-    id: 1,
-    name: `${meetingName} transcript`,
-    kind: 'Meeting',
-    uploadedAt: 'Jul 7, 2026 · 09:41',
-    uploadedBy: 'Inci',
-    status: 'Ready',
-  },
-  {
-    id: 2,
-    name: `${projectName} scope and requirements`,
-    kind: 'Document',
-    uploadedAt: 'Jul 6, 2026 · 15:20',
-    uploadedBy: 'Alex Morgan',
-    status: 'Ready',
-  },
-  {
-    id: 3,
-    name: 'API design notes',
-    kind: 'Document',
-    uploadedAt: 'Jul 5, 2026 · 11:05',
-    uploadedBy: 'Jordan Lee',
-    status: 'Ready',
-  },
-  {
-    id: 4,
-    name: 'Architecture draft',
-    kind: 'Document',
-    uploadedAt: 'Jul 4, 2026 · 16:45',
-    uploadedBy: 'Inci',
-    status: 'Processing',
-  },
-];
 
-const PROJECTS: Record<string, ProjectDetailData> = {
-  '1': {
-    id: 1,
-    name: 'Project Alpha',
-    department: 'Software',
-    workstream: 'MVP scope & API design workstream',
-    role: 'Manager',
-    risk: 'Medium',
-    description:
-      'Project Alpha delivers the MVP of the document-ingestion service. Current focus is finalizing API design and the upload pipeline. Latest meeting captured decisions on storage and scope; AI-extracted action items are pending review.',
-    manager: 'Alex Morgan',
-    createdAt: 'Jun 12, 2026',
-    documents: 8,
-    processingDocuments: 1,
-    confirmedTasks: 24,
-    inProgressTasks: 9,
-    overdueTasks: 3,
-    members: ALPHA_MEMBERS,
-    recentDocuments: buildDocuments('Project Alpha', 'Project Alpha Weekly Meeting'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Prepare frontend wireframes',
-        owner: 'Inci',
-        dueDate: 'Jul 8, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        title: 'Create upload API',
-        owner: 'Jordan Lee',
-        dueDate: 'Jul 20, 2026',
-        status: 'Confirmed',
-      },
-      {
-        id: 3,
-        title: 'Define API schema',
-        owner: 'Inci',
-        dueDate: 'Jul 9, 2026',
-        status: 'Completed',
-      },
-      {
-        id: 4,
-        title: 'Review document access rules',
-        owner: 'Alex Morgan',
-        dueDate: 'Jul 6, 2026',
-        status: 'Overdue',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Meeting transcript uploaded',
-        detail: 'Inci uploaded Project Alpha Weekly Meeting.',
-        time: 'Jul 7 · 09:41',
-        type: 'document',
-      },
-      {
-        id: 2,
-        title: 'Decision confirmed',
-        detail: 'Alex confirmed the use of Amazon S3 for document storage.',
-        time: 'Jul 7 · 10:03',
-        type: 'decision',
-      },
-      {
-        id: 3,
-        title: 'Two tasks created',
-        detail: 'Create upload API and Prepare frontend wireframes were confirmed.',
-        time: 'Jul 7 · 10:05',
-        type: 'task',
-      },
-      {
-        id: 4,
-        title: 'Member role updated',
-        detail: 'Maya Chen was changed to Viewer.',
-        time: 'Jul 6 · 16:18',
-        type: 'member',
-      },
-    ],
-    riskSummary:
-      'The project is progressing, but three overdue tasks and an unfinished upload API create moderate schedule risk.',
-    riskFactors: [
-      'Three overdue tasks are affecting the delivery buffer.',
-      'Upload API implementation is still awaiting final schema confirmation.',
-      'One document is still processing and may require manual review.',
-    ],
-    mitigationActions: [
-      'Prioritize the upload API and access-rule review this sprint.',
-      'Reassign overdue work if owners cannot complete it this week.',
-      'Review document-processing failures during the next stand-up.',
-    ],
-  },
-  '2': {
-    id: 2,
-    name: 'Project Beta',
-    department: 'Software',
-    workstream: 'Search relevance & knowledge retrieval workstream',
-    role: 'Contributor',
-    risk: 'High',
-    description:
-      'Project Beta improves enterprise search quality and document retrieval. The team is validating relevance scoring, citation coverage, and permission-aware search across shared project content.',
-    manager: 'Maya Chen',
-    createdAt: 'May 28, 2026',
-    documents: 12,
-    processingDocuments: 2,
-    confirmedTasks: 31,
-    inProgressTasks: 14,
-    overdueTasks: 7,
-    members: [
-      ALPHA_MEMBERS[3],
-      ALPHA_MEMBERS[0],
-      ALPHA_MEMBERS[1],
-      ALPHA_MEMBERS[2],
-    ],
-    recentDocuments: buildDocuments('Project Beta', 'Search Quality Review'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Tune retrieval thresholds',
-        owner: 'Maya Chen',
-        dueDate: 'Jul 10, 2026',
-        status: 'Overdue',
-      },
-      {
-        id: 2,
-        title: 'Validate source citations',
-        owner: 'Inci',
-        dueDate: 'Jul 15, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 3,
-        title: 'Prepare search evaluation set',
-        owner: 'Jordan Lee',
-        dueDate: 'Jul 16, 2026',
-        status: 'Confirmed',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Evaluation document uploaded',
-        detail: 'The search benchmark dataset was added.',
-        time: 'Jul 10 · 13:14',
-        type: 'document',
-      },
-      {
-        id: 2,
-        title: 'Task moved to overdue',
-        detail: 'Tune retrieval thresholds passed its due date.',
-        time: 'Jul 10 · 18:00',
-        type: 'task',
-      },
-    ],
-    riskSummary:
-      'Search-quality validation is behind schedule, with seven overdue tasks and unresolved relevance issues.',
-    riskFactors: [
-      'Seven overdue tasks are concentrated in the evaluation phase.',
-      'Citation accuracy has not reached the target threshold.',
-      'Two source files remain in processing.',
-    ],
-    mitigationActions: [
-      'Reduce the evaluation scope to the highest-value document types.',
-      'Assign a second reviewer to citation validation.',
-      'Create a daily checkpoint until overdue tasks are reduced.',
-    ],
-  },
-  '3': {
-    id: 3,
-    name: 'Onboarding Revamp',
-    department: 'People',
-    workstream: 'Employee onboarding content & workflow redesign',
-    role: 'Viewer',
-    risk: 'Low',
-    description:
-      'Onboarding Revamp centralizes policies, learning material, and onboarding tasks so new employees can find accurate information and managers can monitor progress.',
-    manager: 'Sam Rivera',
-    createdAt: 'Jun 20, 2026',
-    documents: 5,
-    processingDocuments: 0,
-    confirmedTasks: 10,
-    inProgressTasks: 3,
-    overdueTasks: 0,
-    members: [ALPHA_MEMBERS[4], ALPHA_MEMBERS[3], ALPHA_MEMBERS[2]],
-    recentDocuments: buildDocuments('Onboarding Revamp', 'People Operations Sync'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Review first-week checklist',
-        owner: 'Sam Rivera',
-        dueDate: 'Jul 22, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        title: 'Approve policy links',
-        owner: 'Maya Chen',
-        dueDate: 'Jul 24, 2026',
-        status: 'Confirmed',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Checklist updated',
-        detail: 'The first-week onboarding checklist was revised.',
-        time: 'Jul 12 · 10:40',
-        type: 'document',
-      },
-    ],
-    riskSummary:
-      'The workstream is on track with no overdue tasks and stable document coverage.',
-    riskFactors: ['Final policy approval is still pending.'],
-    mitigationActions: ['Complete the policy review before the pilot group starts.'],
-  },
-  '4': {
-    id: 4,
-    name: 'Data Migration',
-    department: 'Software',
-    workstream: 'Legacy content migration & validation workstream',
-    role: 'Manager',
-    risk: 'High',
-    description:
-      'Data Migration moves legacy project records into the new knowledge platform. The team is validating metadata, permissions, file integrity, and migration exception handling.',
-    manager: 'Alex Morgan',
-    createdAt: 'Apr 18, 2026',
-    documents: 15,
-    processingDocuments: 4,
-    confirmedTasks: 18,
-    inProgressTasks: 6,
-    overdueTasks: 4,
-    members: [ALPHA_MEMBERS[0], ALPHA_MEMBERS[1], ALPHA_MEMBERS[2], ALPHA_MEMBERS[4]],
-    recentDocuments: buildDocuments('Data Migration', 'Migration Readiness Review'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Validate migrated permissions',
-        owner: 'Alex Morgan',
-        dueDate: 'Jul 12, 2026',
-        status: 'Overdue',
-      },
-      {
-        id: 2,
-        title: 'Resolve failed file imports',
-        owner: 'Jordan Lee',
-        dueDate: 'Jul 18, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 3,
-        title: 'Approve migration report',
-        owner: 'Inci',
-        dueDate: 'Jul 21, 2026',
-        status: 'Confirmed',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Migration batch completed',
-        detail: 'The third legacy-document batch finished processing.',
-        time: 'Jul 11 · 15:06',
-        type: 'document',
-      },
-      {
-        id: 2,
-        title: 'Exception task created',
-        detail: 'Resolve failed file imports was assigned to Jordan Lee.',
-        time: 'Jul 11 · 15:20',
-        type: 'task',
-      },
-    ],
-    riskSummary:
-      'Four overdue tasks and several failed file imports create high delivery and data-quality risk.',
-    riskFactors: [
-      'Four documents are still processing.',
-      'Permission validation is overdue.',
-      'Legacy metadata contains inconsistent owner values.',
-    ],
-    mitigationActions: [
-      'Complete permission validation before the next migration batch.',
-      'Quarantine failed imports for manual review.',
-      'Run metadata normalization before final acceptance.',
-    ],
-  },
-  '5': {
-    id: 5,
-    name: 'Mobile App v3',
-    department: 'Product',
-    workstream: 'Mobile experience, release planning & feedback',
-    role: 'Manager',
-    risk: 'Medium',
-    description:
-      'Mobile App v3 coordinates product decisions, release tasks, customer feedback, and supporting design documents for the next mobile application release.',
-    manager: 'Alex Morgan',
-    createdAt: 'Jun 2, 2026',
-    documents: 9,
-    processingDocuments: 1,
-    confirmedTasks: 21,
-    inProgressTasks: 8,
-    overdueTasks: 1,
-    members: [ALPHA_MEMBERS[0], ALPHA_MEMBERS[3], ALPHA_MEMBERS[2]],
-    recentDocuments: buildDocuments('Mobile App v3', 'Mobile Product Review'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Finalize release scope',
-        owner: 'Alex Morgan',
-        dueDate: 'Jul 19, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        title: 'Review usability findings',
-        owner: 'Maya Chen',
-        dueDate: 'Jul 17, 2026',
-        status: 'Overdue',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Product decision confirmed',
-        detail: 'Offline reading was included in the release scope.',
-        time: 'Jul 13 · 11:32',
-        type: 'decision',
-      },
-    ],
-    riskSummary:
-      'The release remains achievable, but one overdue research review may affect final scope decisions.',
-    riskFactors: ['Usability findings have not been fully reviewed.'],
-    mitigationActions: ['Complete the research review before release-scope sign-off.'],
-  },
-  '6': {
-    id: 6,
-    name: 'Q3 Compliance',
-    department: 'Legal',
-    workstream: 'Quarterly policy review & evidence collection',
-    role: 'Viewer',
-    risk: 'Low',
-    description:
-      'Q3 Compliance organizes policy evidence, review meetings, decisions, and follow-up actions needed for the quarterly compliance assessment.',
-    manager: 'Maya Chen',
-    createdAt: 'Jul 1, 2026',
-    documents: 6,
-    processingDocuments: 0,
-    confirmedTasks: 7,
-    inProgressTasks: 2,
-    overdueTasks: 0,
-    members: [ALPHA_MEMBERS[3], ALPHA_MEMBERS[0], ALPHA_MEMBERS[4]],
-    recentDocuments: buildDocuments('Q3 Compliance', 'Compliance Review Meeting'),
-    tasks: [
-      {
-        id: 1,
-        title: 'Collect approval evidence',
-        owner: 'Maya Chen',
-        dueDate: 'Jul 25, 2026',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        title: 'Confirm policy owners',
-        owner: 'Sam Rivera',
-        dueDate: 'Jul 28, 2026',
-        status: 'Confirmed',
-      },
-    ],
-    activity: [
-      {
-        id: 1,
-        title: 'Evidence document added',
-        detail: 'The latest policy approval register was uploaded.',
-        time: 'Jul 14 · 09:22',
-        type: 'document',
-      },
-    ],
-    riskSummary:
-      'The compliance review is on track with no overdue actions and complete core evidence.',
-    riskFactors: ['Two policy-owner confirmations remain open.'],
-    mitigationActions: ['Confirm remaining owners before the final evidence review.'],
-  },
-};
 
 const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: 'overview', label: 'Overview' },
@@ -574,20 +114,111 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const project = projectId ? PROJECTS[projectId] : undefined;
+  const [project, setProject] = useState<ProjectDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
-  const [members, setMembers] = useState<ProjectMember[]>(project?.members ?? []);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [isMemberPanelOpen, setIsMemberPanelOpen] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<MemberRole>('Contributor');
 
   useEffect(() => {
+    const fetchProject = async () => {
+      setIsLoading(true);
+      try {
+        const response = await client.get(`/projects/${projectId}`);
+        const data = response.data;
+
+        const extractInitials = (name: string): string => {
+          const parts = name.trim().split(/\s+/).filter(Boolean);
+          if (parts.length > 1) {
+            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+          }
+          return parts[0]?.slice(0, 2).toUpperCase() || 'U';
+        };
+
+        const projectData: ProjectDetailData = {
+          id: data.id,
+          name: data.name,
+          department: data.department,
+          workstream: data.workstream,
+          role: data.role || 'Viewer',
+          risk: data.risk_level || 'Low',
+          description: data.description,
+          manager: data.manager_name,
+          createdAt: new Date(data.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          }),
+          documents: data.document_count || 0,
+          processingDocuments: data.processing_document_count || 0,
+          confirmedTasks: data.confirmed_tasks_count || 0,
+          inProgressTasks: data.in_progress_tasks_count || 0,
+          overdueTasks: data.overdue_tasks_count || 0,
+          members: data.members?.map((member: any) => ({
+            id: member.id,
+            name: member.name,
+            email: member.email,
+            initials: extractInitials(member.name),
+            role: member.role,
+            avatarTone: (member.avatar_tone || 'blue') as ProjectMember['avatarTone'],
+          })) || [],
+          recentDocuments: data.recent_documents?.map((doc: any) => ({
+            id: doc.id,
+            name: doc.name,
+            kind: doc.kind,
+            uploadedAt: new Date(doc.uploaded_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            uploadedBy: doc.uploaded_by,
+            status: doc.status,
+          })) || [],
+          tasks: data.tasks?.map((task: any) => ({
+            id: task.id,
+            title: task.title,
+            owner: task.owner,
+            dueDate: new Date(task.due_date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            }),
+            status: task.status,
+          })) || [],
+          activity: data.activity?.map((act: any) => ({
+            id: act.id,
+            title: act.title,
+            detail: act.detail,
+            time: act.time,
+            type: act.type,
+          })) || [],
+          riskSummary: data.risk_summary,
+          riskFactors: data.risk_factors || [],
+          mitigationActions: data.mitigation_actions || [],
+        };
+
+        setProject(projectData);
+        setMembers(projectData.members);
+      } catch (error) {
+        console.error('Failed to load project', error);
+        setProject(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (projectId) {
+      fetchProject();
+    }
     setActiveTab('overview');
-    setMembers(project?.members ?? []);
     setIsMemberPanelOpen(false);
-  }, [project]);
+  }, [projectId]);
 
   const canManageMembers = useMemo(() => {
     if (!project) return false;
@@ -598,6 +229,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     );
   }, [currentUserRole, project]);
 
+  if (isLoading) {
+    return (
+      <section className="project-detail project-detail--missing">
+        <div className="project-detail-empty-card">
+          <h1>Loading project...</h1>
+        </div>
+      </section>
+    );
+  }
+
   if (!project) {
     return (
       <section className="project-detail project-detail--missing">
@@ -606,7 +247,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             ?
           </span>
           <h1>Project not found</h1>
-          <p>The selected project does not exist in the current mock data.</p>
+          <p>The selected project does not exist.</p>
           <button type="button" onClick={() => navigate('/projects')}>
             Back to projects
           </button>
@@ -1130,7 +771,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <div className="project-member-modal-list">{renderMembersList(false)}</div>
 
             <div className="project-member-modal-footer">
-              <span>Signed in as {currentUserName}. Changes stay in this mock frontend session.</span>
+              <span>Signed in as {currentUserName}.</span>
               <button type="button" onClick={() => setIsMemberPanelOpen(false)}>
                 Done
               </button>

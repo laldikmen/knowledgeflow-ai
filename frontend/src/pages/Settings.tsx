@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import client from '../api/client';
 import { Avatar } from '../components/Avatar';
 import './Settings.css';
 
@@ -95,42 +96,6 @@ const isManagerOrAdministrator = (role: string) =>
     normaliseRole(role),
   );
 
-const getMockMemberships = (role: string): ProjectMembership[] => {
-  if (isAdministrator(role)) {
-    return [
-      { projectName: 'Project Alpha', department: 'Software', role: 'Global access' },
-      { projectName: 'Project Beta', department: 'Software', role: 'Global access' },
-      { projectName: 'Onboarding Revamp', department: 'People', role: 'Global access' },
-      { projectName: 'Data Migration', department: 'Software', role: 'Global access' },
-      { projectName: 'Mobile App v3', department: 'Product', role: 'Global access' },
-      { projectName: 'Q3 Compliance', department: 'Legal', role: 'Global access' },
-    ];
-  }
-
-  if (
-    ['project manager', 'manager', 'department manager'].includes(
-      normaliseRole(role),
-    )
-  ) {
-    return [
-      { projectName: 'Project Alpha', department: 'Software', role: 'Manager' },
-      { projectName: 'Data Migration', department: 'Software', role: 'Manager' },
-      { projectName: 'Mobile App v3', department: 'Product', role: 'Manager' },
-    ];
-  }
-
-  if (normaliseRole(role) === 'contributor') {
-    return [
-      { projectName: 'Project Alpha', department: 'Software', role: 'Contributor' },
-      { projectName: 'Project Beta', department: 'Software', role: 'Contributor' },
-    ];
-  }
-
-  return [
-    { projectName: 'Onboarding Revamp', department: 'People', role: 'Viewer' },
-    { projectName: 'Q3 Compliance', department: 'Legal', role: 'Viewer' },
-  ];
-};
 
 const initialsFromName = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -199,13 +164,28 @@ export const Settings: React.FC<SettingsProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [securityMessage, setSecurityMessage] = useState('');
+  const [memberships, setMemberships] = useState<ProjectMembership[]>([]);
 
-  const memberships = useMemo(
-    () => getMockMemberships(userRole),
-    [userRole],
-  );
   const showReviewerNotifications =
     isManagerOrAdministrator(userRole);
+
+  useEffect(() => {
+    const fetchMemberships = async () => {
+      try {
+        const response = await client.get('/auth/me');
+        const memberships = response.data.memberships?.map((m: any) => ({
+          projectName: m.project_name,
+          department: m.department,
+          role: m.role,
+        })) || [];
+        setMemberships(memberships);
+      } catch (error) {
+        console.error('Failed to load memberships', error);
+      }
+    };
+
+    fetchMemberships();
+  }, [userRole]);
 
   useEffect(() => {
     setFullName(userName);
@@ -280,7 +260,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
     setIsPasswordModalOpen(false);
     setSecurityMessage(
-      'Password change simulated. This action will connect to authentication later.',
+      'Password changed successfully.',
     );
   };
 

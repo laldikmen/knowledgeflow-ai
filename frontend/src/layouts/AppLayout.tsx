@@ -111,7 +111,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     if (currentPage === 'documents') {
       return {
         title: 'Documents & Meetings',
-        subtitle: 'Project Alpha · 8 files',
         searchPlaceholder: 'Search files...',
         actionLabel: 'Upload',
         actionIcon: 'upload',

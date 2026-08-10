@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Button } from '../components/Button';
+import client from '../api/client';
 import './Upload.css';
 
 type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
@@ -107,21 +108,42 @@ export const Upload: React.FC = () => {
       currentFiles.map((file) => ({ ...file, status: 'processing' })),
     );
 
-    // TODO: Replace this mock delay with the real upload and processing API call.
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    try {
+      const fileElements = fileInputRef.current?.files;
+      if (!fileElements) {
+        throw new Error('No files selected');
+      }
 
-    setFiles((currentFiles) =>
-      currentFiles.map((file) => ({ ...file, status: 'success' })),
-    );
-    setIsProcessing(false);
+      for (const file of Array.from(fileElements)) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('project_id', projectId);
+        formData.append('document_type', documentType);
+        formData.append('title', title);
+        if (description.trim()) {
+          formData.append('description', description);
+        }
 
-    console.log('Starting AI processing:', {
-      projectId,
-      documentType,
-      title,
-      description,
-      files,
-    });
+        await client.post('/documents/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+      }
+
+      setFiles((currentFiles) =>
+        currentFiles.map((file) => ({ ...file, status: 'success' })),
+      );
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setFiles((currentFiles) =>
+        currentFiles.map((file) => ({ ...file, status: 'error' })),
+      );
+    } finally {
+      setIsProcessing(false);
+      setTitle('');
+      setDescription('');
+    }
   };
 
   const formatFileSize = (bytes: number) => {

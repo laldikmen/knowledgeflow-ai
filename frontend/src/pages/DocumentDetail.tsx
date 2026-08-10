@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import client from '../api/client';
 import './DocumentDetail.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TaskEditModal, type TaskEditValues } from '../components/TaskEditModal';
@@ -76,233 +77,6 @@ type EditingTarget =
   | { kind: 'decision'; id: number }
   | null;
 
-const MOCK_DOCUMENTS: Record<number, DocumentDetailData> = {
-  1: {
-    id: 1,
-    name: 'Project Alpha Weekly Meeting',
-    projectName: 'Project Alpha',
-    typeLabel: 'Meeting transcript',
-    status: 'processed',
-    uploadedBy: 'Inci',
-    uploadedDate: 'Jul 7, 2026',
-    analyzedIn: '48s',
-    sourceTitle: 'Transcript',
-    sourceExcerpts: [
-      {
-        id: 1,
-        label: '00:02',
-        speaker: 'Alex',
-        text: 'The main focus today is confirming the MVP scope and finalizing the API design before implementation begins.',
-        kind: 'plain',
-      },
-      {
-        id: 2,
-        label: '04:18',
-        speaker: 'Jordan',
-        text: "...let's just use Amazon S3 for document storage, it's the simplest path for the MVP.",
-        kind: 'decision',
-      },
-      {
-        id: 3,
-        label: '06:41',
-        speaker: 'Inci',
-        text: 'I can complete the frontend wireframes after the upload flow and document states are finalized.',
-        kind: 'plain',
-      },
-      {
-        id: 4,
-        label: '09:12',
-        speaker: 'Alex',
-        text: 'Inci, can you create the upload API by the 20th? And the frontend wireframe was due last week.',
-        kind: 'action',
-      },
-    ],
-    summary: {
-      text: 'The meeting focused on MVP scope and API design. The team agreed on a storage approach and assigned two immediate engineering tasks.',
-      confidence: 0.91,
-      status: 'draft',
-    },
-    decisions: [
-      {
-        id: 1,
-        text: 'Use Amazon S3 for document storage.',
-        source: '“...let’s just use Amazon S3 for document storage.” — 04:18',
-        confidence: 0.95,
-        status: 'confirmed',
-        confirmedBy: 'Alex',
-        confirmedDate: 'Jul 7',
-      },
-    ],
-    actionItems: [
-      {
-        id: 1,
-        taskId: 3,
-        title: 'Create upload API',
-        owner: 'Inci',
-        deadline: 'Jul 20',
-        priority: 'Medium',
-        source: '“can you create the upload API by the 20th?” — 09:12',
-        confidence: 0.93,
-        status: 'confirmed',
-      },
-      {
-        id: 2,
-        taskId: 1,
-        title: 'Prepare frontend wireframe',
-        owner: 'Inci',
-        ownerSuggested: true,
-        deadline: 'Jul 8',
-        deadlineSuggested: true,
-        priority: 'High',
-        source: '“the frontend wireframe was due last week.” — 09:12',
-        confidence: 0.88,
-        status: 'draft',
-        overdueDays: 11,
-      },
-    ],
-  },
-  2: {
-    id: 2,
-    name: 'API Design v2.pdf',
-    projectName: 'Project Alpha',
-    typeLabel: 'PDF',
-    status: 'processing',
-    uploadedBy: 'Inci',
-    uploadedDate: 'Jul 7, 2026',
-    fileSize: '1.8 MB',
-    processingProgress: 64,
-    processingStage: 'Extracting decisions and action items',
-    sourceTitle: 'Document preview',
-    sourceExcerpts: [
-      {
-        id: 1,
-        label: 'Page 2',
-        text: 'The upload endpoint accepts PDF, Word, PowerPoint, and plain-text meeting transcripts.',
-        kind: 'plain',
-      },
-      {
-        id: 2,
-        label: 'Page 4',
-        text: 'Files are stored in Amazon S3 and the resulting metadata is recorded in the project database.',
-        kind: 'plain',
-      },
-    ],
-    decisions: [],
-    actionItems: [],
-  },
-  3: {
-    id: 3,
-    name: 'MVP Scope.docx',
-    projectName: 'Project Alpha',
-    typeLabel: 'Word document',
-    status: 'processed',
-    uploadedBy: 'Alex Morgan',
-    uploadedDate: 'Jul 5, 2026',
-    analyzedIn: '31s',
-    fileSize: '640 KB',
-    sourceTitle: 'Document excerpts',
-    sourceExcerpts: [
-      {
-        id: 1,
-        label: 'Section 2.1',
-        text: 'The MVP will support document upload, AI summaries, decision extraction, action-item extraction, and project-scoped question answering.',
-        kind: 'decision',
-      },
-      {
-        id: 2,
-        label: 'Section 3.2',
-        text: 'External integrations, mobile support, and advanced knowledge graph features are deferred to a later release.',
-        kind: 'plain',
-      },
-      {
-        id: 3,
-        label: 'Section 5.1',
-        text: 'The project manager must approve extracted tasks before they appear in the shared action tracker.',
-        kind: 'action',
-      },
-    ],
-    summary: {
-      text: 'The document defines the KnowledgeFlow AI MVP, its included document-processing and project-assistant capabilities, and the features deferred beyond the first release.',
-      confidence: 0.94,
-      status: 'confirmed',
-    },
-    decisions: [
-      {
-        id: 1,
-        text: 'Limit the first release to document processing, task extraction, and project-scoped AI assistance.',
-        source: 'MVP Scope, Section 2.1',
-        confidence: 0.96,
-        status: 'confirmed',
-        confirmedBy: 'Alex Morgan',
-        confirmedDate: 'Jul 5',
-      },
-      {
-        id: 2,
-        text: 'Defer external integrations and advanced knowledge-graph features.',
-        source: 'MVP Scope, Section 3.2',
-        confidence: 0.9,
-        status: 'draft',
-      },
-    ],
-    actionItems: [
-      {
-        id: 1,
-        taskId: 14,
-        title: 'Define the human review workflow',
-        owner: 'Alex Morgan',
-        ownerSuggested: true,
-        deadline: 'Jul 12',
-        deadlineSuggested: true,
-        priority: 'Medium',
-        source: 'MVP Scope, Section 5.1',
-        confidence: 0.86,
-        status: 'draft',
-      },
-    ],
-  },
-  4: {
-    id: 4,
-    name: 'Kickoff Deck.pptx',
-    projectName: 'Project Alpha',
-    typeLabel: 'PowerPoint',
-    status: 'uploaded',
-    uploadedBy: 'Jordan Lee',
-    uploadedDate: 'Jul 8, 2026',
-    fileSize: '3.2 MB',
-    sourceTitle: 'Slide preview',
-    sourceExcerpts: [
-      {
-        id: 1,
-        label: 'Slide 1',
-        text: 'KnowledgeFlow AI — Project kickoff and delivery roadmap.',
-        kind: 'plain',
-      },
-      {
-        id: 2,
-        label: 'Slide 4',
-        text: 'Phase one focuses on upload, metadata, summarization, action extraction, and the action tracker.',
-        kind: 'plain',
-      },
-    ],
-    decisions: [],
-    actionItems: [],
-  },
-  5: {
-    id: 5,
-    name: 'Legacy Notes.pdf',
-    projectName: 'Project Alpha',
-    typeLabel: 'PDF',
-    status: 'failed',
-    uploadedBy: 'Inci',
-    uploadedDate: 'Jul 6, 2026',
-    fileSize: '2.4 MB',
-    errorMessage: 'The file could not be processed because text extraction and OCR both failed.',
-    sourceTitle: 'Document preview',
-    sourceExcerpts: [],
-    decisions: [],
-    actionItems: [],
-  },
-};
 
 const normaliseRole = (role: string) => role.trim().toLowerCase();
 
@@ -316,8 +90,6 @@ const canReviewAiContent = (role: string) => {
   ].includes(normalised);
 };
 
-const cloneDocument = (document: DocumentDetailData): DocumentDetailData =>
-  JSON.parse(JSON.stringify(document)) as DocumentDetailData;
 
 const StatusBadge: React.FC<{ status: ReviewStatus }> = ({ status }) => (
   <span className={`document-detail-review-status document-detail-review-status--${status}`}>
@@ -391,10 +163,8 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const navigate = useNavigate();
   const { documentId } = useParams<{ documentId: string }>();
   const numericDocumentId = Number(documentId);
-  const sourceDocument = MOCK_DOCUMENTS[numericDocumentId];
-  const [document, setDocument] = useState<DocumentDetailData | null>(() =>
-    sourceDocument ? cloneDocument(sourceDocument) : null,
-  );
+  const [document, setDocument] = useState<DocumentDetailData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   const [editText, setEditText] = useState('');
   const [pendingActionReview, setPendingActionReview] = useState<{
@@ -406,7 +176,84 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const canReview = canReviewAiContent(currentUserRole);
 
   useEffect(() => {
-    setDocument(sourceDocument ? cloneDocument(sourceDocument) : null);
+    const fetchDocument = async () => {
+      setIsLoading(true);
+      try {
+        const response = await client.get(`/documents/${numericDocumentId}`);
+        const data = response.data;
+
+        const documentData: DocumentDetailData = {
+          id: data.id,
+          name: data.title || data.name,
+          projectName: data.project_name,
+          typeLabel: data.document_type || 'Document',
+          status: data.status || 'uploaded',
+          uploadedBy: data.uploaded_by || data.created_by,
+          uploadedDate: new Date(data.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          }),
+          analyzedIn: data.processed_in,
+          fileSize: data.file_size_kb ? `${(data.file_size_kb / 1024).toFixed(1)} MB` : undefined,
+          processingProgress: data.processing_progress,
+          processingStage: data.processing_stage,
+          errorMessage: data.error_message,
+          sourceTitle: data.source_title || 'Source',
+          sourceExcerpts: data.source_excerpts?.map((excerpt: any) => ({
+            id: excerpt.id,
+            label: excerpt.label,
+            speaker: excerpt.speaker,
+            text: excerpt.text,
+            kind: excerpt.kind,
+          })) || [],
+          summary: data.summary
+            ? {
+                text: data.summary.text,
+                confidence: data.summary.confidence,
+                status: data.summary.status || 'draft',
+              }
+            : undefined,
+          decisions: data.decisions?.map((decision: any) => ({
+            id: decision.id,
+            text: decision.text,
+            source: decision.source,
+            confidence: decision.confidence,
+            status: decision.status || 'draft',
+            confirmedBy: decision.confirmed_by,
+            confirmedDate: decision.confirmed_date,
+          })) || [],
+          actionItems: data.action_items?.map((item: any) => ({
+            id: item.id,
+            taskId: item.task_id,
+            title: item.title,
+            owner: item.owner,
+            ownerSuggested: item.owner_suggested,
+            deadline: item.deadline,
+            deadlineSuggested: item.deadline_suggested,
+            priority: (item.priority || 'Medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1) as Priority,
+            source: item.source,
+            confidence: item.confidence,
+            status: item.status || 'draft',
+            overdueDays: item.overdue_days,
+            description: item.description,
+            projectName: item.project_name,
+            rejectionReason: item.rejection_reason,
+          })) || [],
+        };
+
+        setDocument(documentData);
+      } catch (error) {
+        console.error('Failed to load document', error);
+        setDocument(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (numericDocumentId) {
+      fetchDocument();
+    }
     setEditingTarget(null);
     setPendingActionReview(null);
     setReviewReason('');
@@ -427,13 +274,23 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
       : document.actionItems.filter((item) => item.status === 'confirmed');
   }, [canReview, document]);
 
+  if (isLoading) {
+    return (
+      <section className="document-detail document-detail-not-found">
+        <div className="document-detail-empty-card">
+          <h1>Loading document...</h1>
+        </div>
+      </section>
+    );
+  }
+
   if (!document) {
     return (
       <section className="document-detail document-detail-not-found">
         <div className="document-detail-empty-card">
           <span className="document-detail-empty-icon" aria-hidden="true">?</span>
           <h1>Document not found</h1>
-          <p>The selected document does not exist in the current mock dataset.</p>
+          <p>The selected document does not exist.</p>
           <button
             type="button"
             className="document-detail-button document-detail-button--primary"
@@ -629,7 +486,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         [excerpt.label, excerpt.speaker, excerpt.text].filter(Boolean).join(' · '),
       )
       .join('\n\n');
-    const blob = new Blob([sourceText || `Mock file: ${document.name}`], {
+    const blob = new Blob([sourceText || document.name], {
       type: 'text/plain;charset=utf-8',
     });
     const url = URL.createObjectURL(blob);

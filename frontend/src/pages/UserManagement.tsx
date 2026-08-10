@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import client from '../api/client';
 import './UserManagement.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
@@ -47,62 +48,6 @@ const ROLES: UserRole[] = [
   'Viewer',
 ];
 
-const INITIAL_USERS: ManagedUser[] = [
-  {
-    id: 1,
-    name: 'Sam Rivera',
-    email: 'sam.rivera@acme.com',
-    initials: 'SR',
-    role: 'System Administrator',
-    projectIds: [],
-    status: 'active',
-  },
-  {
-    id: 2,
-    name: 'Alex Morgan',
-    email: 'alex.morgan@acme.com',
-    initials: 'AM',
-    role: 'Project Manager',
-    projectIds: ['alpha', 'data-migration', 'mobile-v3'],
-    status: 'active',
-  },
-  {
-    id: 3,
-    name: 'Jordan Lee',
-    email: 'jordan.lee@acme.com',
-    initials: 'JL',
-    role: 'Contributor',
-    projectIds: ['alpha', 'beta'],
-    status: 'active',
-  },
-  {
-    id: 4,
-    name: 'Inci',
-    email: 'inci@acme.com',
-    initials: 'I',
-    role: 'Contributor',
-    projectIds: ['alpha'],
-    status: 'active',
-  },
-  {
-    id: 5,
-    name: 'Riley Chen',
-    email: 'riley.chen@acme.com',
-    initials: 'RC',
-    role: 'Viewer',
-    projectIds: ['beta'],
-    status: 'inactive',
-  },
-  {
-    id: 6,
-    name: 'Maya Patel',
-    email: 'maya.patel@acme.com',
-    initials: 'MP',
-    role: 'Viewer',
-    projectIds: ['data-migration'],
-    status: 'active',
-  },
-];
 
 const EMPTY_FORM: UserFormState = {
   fullName: '',
@@ -127,13 +72,36 @@ const roleClassName = (role: UserRole) =>
   role.toLowerCase().replace(/\s+/g, '-');
 
 export const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<ManagedUser[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [form, setForm] = useState<UserFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [pendingCreate, setPendingCreate] = useState<UserFormState | null>(null);
   const [pendingStatusUser, setPendingStatusUser] = useState<ManagedUser | null>(null);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await client.get('/users');
+        const managedUsers = response.data.map((user: any) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          initials: getInitials(user.name),
+          role: user.system_role as UserRole,
+          projectIds: user.project_ids || [],
+          status: user.status || 'active',
+        }));
+        setUsers(managedUsers);
+      } catch (error) {
+        console.error('Failed to load users', error);
+        setUsers([]);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const activeUsers = useMemo(
     () => users.filter((user) => user.status === 'active').length,
@@ -384,7 +352,7 @@ export const UserManagement: React.FC = () => {
                       disabled={user.role === 'System Administrator'}
                       title={
                         user.role === 'System Administrator'
-                          ? 'The mock primary administrator cannot be deactivated.'
+                          ? 'The primary administrator cannot be deactivated.'
                           : undefined
                       }
                     >

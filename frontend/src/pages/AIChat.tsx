@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import client from '../api/client';
 import './AIChat.css';
 
 interface ChatSource {
@@ -29,113 +30,7 @@ const projects = [
   { id: 'migration', name: 'Data Migration' },
 ];
 
-const initialSessions: ChatSession[] = [
-  {
-    id: 1,
-    projectId: 'alpha',
-    title: 'Decisions in Alpha meeting',
-    time: 'Just now',
-    messages: [
-      {
-        id: 101,
-        type: 'user',
-        content: 'What decisions were made in the Project Alpha meeting?',
-      },
-      {
-        id: 102,
-        type: 'assistant',
-        content:
-          'One decision was confirmed in the Project Alpha Weekly Meeting: the team will use Amazon S3 for document storage as the simplest path for the MVP.',
-        emphasis: 'the team will use Amazon S3 for document storage',
-        source: {
-          title: 'Project Alpha Weekly Meeting',
-          meta: 'Decision · 04:18 · confidence 0.95',
-        },
-      },
-      {
-        id: 103,
-        type: 'user',
-        content: "What's the Q3 marketing budget?",
-      },
-      {
-        id: 104,
-        type: 'assistant',
-        content: 'I could not find this information in the documents available to your account.',
-        unavailable: true,
-      },
-    ],
-  },
-  {
-    id: 2,
-    projectId: 'alpha',
-    title: 'Who owns the upload API?',
-    time: 'Yesterday',
-    messages: [
-      {
-        id: 201,
-        type: 'user',
-        content: 'Who owns the upload API task?',
-      },
-      {
-        id: 202,
-        type: 'assistant',
-        content: 'The upload API task is assigned to Jordan Lee and is currently marked In Progress.',
-        emphasis: 'Jordan Lee',
-        source: {
-          title: 'Action Tracker Board',
-          meta: 'Task · Upload API · In Progress',
-        },
-      },
-    ],
-  },
-  {
-    id: 3,
-    projectId: 'beta',
-    title: 'Beta project risks',
-    time: 'Monday',
-    messages: [
-      {
-        id: 301,
-        type: 'user',
-        content: 'What are the main risks in Project Beta?',
-      },
-      {
-        id: 302,
-        type: 'assistant',
-        content:
-          'The current Project Beta notes identify dependency delays and incomplete acceptance criteria as the main risks.',
-        emphasis: 'dependency delays and incomplete acceptance criteria',
-        source: {
-          title: 'Project Beta Status Review',
-          meta: 'Risk summary · confidence 0.91',
-        },
-      },
-    ],
-  },
-  {
-    id: 4,
-    projectId: 'migration',
-    title: 'Migration milestones',
-    time: 'Last week',
-    messages: [
-      {
-        id: 401,
-        type: 'user',
-        content: 'What is the next migration milestone?',
-      },
-      {
-        id: 402,
-        type: 'assistant',
-        content: 'The next milestone is completion of the staging-data validation cycle.',
-        emphasis: 'completion of the staging-data validation cycle',
-        source: {
-          title: 'Data Migration Plan',
-          meta: 'Milestone · Phase 2',
-        },
-      },
-    ],
-  },
-];
+const initialSessions: ChatSession[] = [];
 
 const renderMessageText = (message: ChatMessage) => {
   if (!message.emphasis || !message.content.includes(message.emphasis)) {
@@ -197,49 +92,33 @@ export const AIChat: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const buildAssistantResponse = (
+  const fetchAssistantResponse = async (
     question: string,
-    projectName: string,
-  ): Omit<ChatMessage, 'id' | 'type'> => {
-    const normalized = question.toLowerCase();
+    projectId: string,
+  ): Promise<Omit<ChatMessage, 'id' | 'type'>> => {
+    try {
+      const response = await client.post('/chat', {
+        question,
+        project_id: projectId,
+      });
 
-    if (normalized.includes('budget') || normalized.includes('marketing')) {
+      const data = response.data;
       return {
-        content: 'I could not find this information in the documents available to your account.',
+        content: data.answer || data.content,
+        emphasis: data.emphasis,
+        source: data.source ? {
+          title: data.source.title,
+          meta: data.source.meta,
+        } : undefined,
+        unavailable: data.unavailable || false,
+      };
+    } catch (error) {
+      console.error('Failed to get AI response:', error);
+      return {
+        content: 'I could not process your question at this time. Please try again.',
         unavailable: true,
       };
     }
-
-    if (normalized.includes('upload') || normalized.includes('api')) {
-      return {
-        content: 'The upload API task is assigned to Jordan Lee and is currently marked In Progress.',
-        emphasis: 'Jordan Lee',
-        source: {
-          title: 'Action Tracker Board',
-          meta: 'Task · Upload API · In Progress',
-        },
-      };
-    }
-
-    if (normalized.includes('overdue') || normalized.includes('action item')) {
-      return {
-        content: `${projectName} currently has three overdue action items. The highest-priority item is the frontend wireframe assigned to Inci.`,
-        emphasis: 'three overdue action items',
-        source: {
-          title: 'Action Tracker Board',
-          meta: `Tasks · ${projectName}`,
-        },
-      };
-    }
-
-    return {
-      content: `One decision was confirmed in the ${projectName} meeting: the team will use Amazon S3 for document storage as the simplest path for the MVP.`,
-      emphasis: 'the team will use Amazon S3 for document storage',
-      source: {
-        title: `${projectName} Weekly Meeting`,
-        meta: 'Decision · 04:18 · confidence 0.95',
-      },
-    };
   };
 
   const handleProjectChange = (projectId: string) => {
@@ -257,7 +136,7 @@ export const AIChat: React.FC = () => {
     setIsLoading(false);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const question = inputValue.trim();
     if (!question || isLoading) return;
 
@@ -306,33 +185,30 @@ export const AIChat: React.FC = () => {
     }
 
     const responseSessionId = targetSessionId;
-    const responseProjectName = selectedProjectName;
 
     setInputValue('');
     setIsLoading(true);
 
-    window.setTimeout(() => {
-      const response = buildAssistantResponse(question, responseProjectName);
+    const response = await fetchAssistantResponse(question, selectedProject);
 
-      setSessions(previous =>
-        previous.map(session =>
-          session.id === responseSessionId
-            ? {
-                ...session,
-                messages: [
-                  ...session.messages,
-                  {
-                    id: Date.now() + 2,
-                    type: 'assistant',
-                    ...response,
-                  },
-                ],
-              }
-            : session,
-        ),
-      );
-      setIsLoading(false);
-    }, 800);
+    setSessions(previous =>
+      previous.map(session =>
+        session.id === responseSessionId
+          ? {
+              ...session,
+              messages: [
+                ...session.messages,
+                {
+                  id: Date.now() + 2,
+                  type: 'assistant',
+                  ...response,
+                },
+              ],
+            }
+          : session,
+      ),
+    );
+    setIsLoading(false);
   };
 
   const handleNewChat = () => {

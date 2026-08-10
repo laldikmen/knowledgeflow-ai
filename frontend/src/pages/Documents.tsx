@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import client from '../api/client';
 import './Documents.css';
 
 type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
@@ -86,61 +87,24 @@ export const Documents: React.FC = () => {
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
-        // TODO: Replace with the real API call.
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        setDocuments([
-          {
-            id: 1,
-            name: 'Project Alpha Weekly Meeting',
-            type: 'transcript',
-            uploadedBy: 'Inci',
-            uploadedDate: 'Jul 7',
-            status: 'processed',
-            details: '3 action items · 2 decisions',
-            action: 'Open',
-          },
-          {
-            id: 2,
-            name: 'API Design v2.pdf',
-            type: 'pdf',
-            uploadedBy: 'Inci',
-            uploadedDate: 'Jul 7',
-            status: 'processing',
-            details: '1.8 MB',
-            action: 'Open',
-          },
-          {
-            id: 3,
-            name: 'MVP Scope.docx',
-            type: 'doc',
-            uploadedBy: 'Alex Morgan',
-            uploadedDate: 'Jul 5',
-            status: 'processed',
-            details: '640 KB',
-            action: 'Open',
-          },
-          {
-            id: 4,
-            name: 'Kickoff Deck.pptx',
-            type: 'ppt',
-            uploadedBy: 'Jordan Lee',
-            uploadedDate: 'Jul 8',
-            status: 'uploaded',
-            details: 'just uploaded',
-            action: 'Process',
-          },
-          {
-            id: 5,
-            name: 'Legacy Notes.pdf',
-            type: 'pdf',
-            uploadedBy: 'Inci',
-            uploadedDate: 'Jul 6',
-            status: 'failed',
-            details: 'Unreadable file — OCR failed',
-            action: 'Retry',
-          },
-        ]);
+        const response = await client.get('/documents');
+        const documents = response.data.map((doc: any) => ({
+          id: doc.id,
+          name: doc.title || doc.name,
+          type: doc.document_type || 'pdf',
+          uploadedBy: doc.uploaded_by || doc.created_by,
+          uploadedDate: new Date(doc.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          status: doc.status || 'uploaded',
+          details:
+            doc.file_size_kb && doc.file_size_kb > 0
+              ? `${(doc.file_size_kb / 1024).toFixed(1)} MB`
+              : doc.description || '',
+          action: doc.status === 'processed' ? 'Open' : 'Process',
+        }));
+        setDocuments(documents);
       } catch (error) {
         console.error('Failed to load documents', error);
       } finally {

@@ -9,6 +9,8 @@ import taskRoutes from './routes/tasks';
 import aiRoutes from './routes/ai';
 import chatRoutes from './routes/chat';
 import dashboardRoutes from './routes/dashboard';
+import userRoutes from './routes/users';
+import timelineRoutes from './routes/timeline';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import serverless from 'serverless-http';
 
@@ -18,14 +20,40 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Under API Gateway the forwarded Content-Type can vary or be missing, which
+// makes the default express.json() silently skip parsing (leaving req.body empty).
+// Parse anything that is NOT a multipart upload as JSON so request bodies always
+// arrive parsed, while file uploads still fall through to multer.
+app.use(
+  express.json({
+    type: (req) =>
+      !(req.headers['content-type'] || '').includes('multipart/form-data'),
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
+
+// Under API Gateway + serverless-http the JSON body is delivered to Express as a
+// raw Buffer rather than a parsed object, so express.json() leaves req.body as a
+// Buffer. Parse it here so every handler receives a normal object.
+app.use((req, _res, next) => {
+  if (Buffer.isBuffer(req.body)) {
+    const text = req.body.toString('utf8');
+    try {
+      req.body = text ? JSON.parse(text) : {};
+    } catch {
+      req.body = {};
+    }
+  }
+  next();
+});
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes);
 app.use('/tasks', taskRoutes);
+app.use('/users', userRoutes);
+app.use('/timeline', timelineRoutes);
 app.use('/ai', aiRoutes);
 app.use('/ai/chat', chatRoutes);
 app.use('/dashboard', dashboardRoutes);

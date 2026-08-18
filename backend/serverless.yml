@@ -2,6 +2,10 @@ service: knowledgeflow-ai-backend
 
 frameworkVersion: '3'
 
+# Load environment variables from .env at deploy time so ${env:...} resolves
+# to the real DB / S3 / JWT config instead of the localhost defaults.
+useDotenv: true
+
 provider:
   name: aws
   runtime: nodejs20.x

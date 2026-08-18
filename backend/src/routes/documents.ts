@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import {
   uploadDocument,
+  getAllDocuments,
   getProjectDocuments,
   getDocumentDetail,
   deleteDocument,
@@ -19,6 +20,9 @@ const upload = multer({
 
 // All routes require authentication
 router.use(verifyToken);
+
+// List all accessible documents
+router.get('/', getAllDocuments);
 
 // Upload document
 router.post('/upload', upload.single('file'), uploadDocument);

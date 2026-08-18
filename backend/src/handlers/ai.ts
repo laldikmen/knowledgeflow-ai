@@ -1,18 +1,10 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
-import AWS from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 
-const bedrock = new AWS.Bedrock({
-  region: process.env.AWS_REGION || 'us-east-1',
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-});
-
-const bedrockRuntime = new AWS.BedrockRuntime({
-  region: process.env.AWS_REGION || 'us-east-1',
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-});
+// TODO: Bedrock initialization - use bedrock-runtime library instead of aws-sdk v2
+// const bedrock = new AWS.Bedrock({...});
+// const bedrockRuntime = new AWS.BedrockRuntime({...});
 
 interface ClaudeResponse {
   content: Array<{
@@ -37,27 +29,10 @@ async function callBedrock(prompt: string): Promise<string> {
       return '';
     }
 
-    // Real Bedrock API call
-    const params = {
-      modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({
-        anthropic_version: 'bedrock-2023-06-01',
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    };
-
-    const response = await bedrockRuntime.invokeModel(params).promise();
-    const body = JSON.parse(response.body?.toString() || '{}') as ClaudeResponse;
-    const text = body.content[0]?.text || '';
-    return text;
+    // TODO: Real Bedrock API call - implement when bedrock-runtime library is installed
+    // const params = { ... };
+    // const response = await bedrockRuntime.invokeModel(params).promise();
+    throw new Error('Bedrock API not configured. Set NODE_ENV=development for mock responses.');
   } catch (error) {
     console.error('Bedrock API error:', error);
     throw new Error('Failed to call Bedrock API');
@@ -98,13 +73,18 @@ export const processDocument = async (req: Request, res: Response) => {
       [document.project_id, req.user.id]
     );
 
+    // Triggering AI processing is allowed for admins and for members who can
+    // contribute (manager or contributor). Viewers are read-only. (spec matrix:
+    // "Trigger AI processing" — Admin/Manager/Contributor = Yes, Viewer = No.)
     const isAdmin = req.user.system_role === 'admin';
-    const isManager = accessResult.rows.length > 0 && accessResult.rows[0].project_role === 'manager';
+    const projectRole = accessResult.rows[0]?.project_role;
+    const canProcess =
+      isAdmin || projectRole === 'manager' || projectRole === 'contributor';
 
-    if (!isAdmin && !isManager) {
+    if (!canProcess) {
       return res.status(403).json({
         success: false,
-        error: 'Only managers and admins can process documents',
+        error: 'Viewers cannot trigger AI processing',
       });
     }
 
@@ -404,7 +384,7 @@ export const reviewActionItem = async (req: Request, res: Response) => {
 
     // Get task and check access
     const taskResult = await query(
-      `SELECT project_id FROM action_items WHERE id = $1`,
+      `SELECT project_id, status FROM action_items WHERE id = $1`,
       [taskId]
     );
 
@@ -416,6 +396,7 @@ export const reviewActionItem = async (req: Request, res: Response) => {
     }
 
     const task = taskResult.rows[0];
+    const previousStatus = task.status;
 
     // Check access (admin/manager only)
     const accessResult = await query(
@@ -434,14 +415,25 @@ export const reviewActionItem = async (req: Request, res: Response) => {
       });
     }
 
-    // Update task review status
+    // Confirm turns the draft into a tracked task; reject marks it rejected.
+    // action_items uses `status` for the lifecycle (there is no review_status column).
     const newStatus = review_status === 'confirmed' ? 'confirmed' : 'rejected';
     await query(
       `UPDATE action_items
-       SET review_status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP, review_note = $3, status = $4
-       WHERE id = $5`,
-      [review_status, req.user.id, review_note || null, newStatus, taskId]
+       SET status = $1, reviewed_by = $2, reviewed_at = CURRENT_TIMESTAMP,
+           review_note = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4`,
+      [newStatus, req.user.id, review_note || null, taskId]
     );
+
+    // Record the status change in task history.
+    if (newStatus !== previousStatus) {
+      await query(
+        `INSERT INTO task_status_history (task_id, previous_status, new_status, changed_by, change_note)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [taskId, previousStatus, newStatus, req.user.id, review_note || null]
+      );
+    }
 
     return res.json({
       success: true,
@@ -514,6 +506,17 @@ export const getAISummary = async (req: Request, res: Response) => {
       });
     }
 
+    // Viewers may only see confirmed AI content.
+    const isViewer =
+      accessResult.rows[0]?.project_role === 'viewer' &&
+      req.user.system_role !== 'admin';
+    if (isViewer && result.rows[0].review_status !== 'confirmed') {
+      return res.status(404).json({
+        success: false,
+        error: 'Summary not found',
+      });
+    }
+
     return res.json({
       success: true,
       data: result.rows[0],
@@ -567,6 +570,11 @@ export const getAIDecisions = async (req: Request, res: Response) => {
       });
     }
 
+    // Viewers may only see confirmed decisions; others also see drafts.
+    const isViewer =
+      accessResult.rows[0]?.project_role === 'viewer' &&
+      req.user.system_role !== 'admin';
+
     // Get decisions
     const result = await query(
       `SELECT
@@ -575,6 +583,7 @@ export const getAIDecisions = async (req: Request, res: Response) => {
         created_at
       FROM decisions
       WHERE document_id = $1
+        ${isViewer ? "AND review_status = 'confirmed'" : ''}
       ORDER BY created_at DESC`,
       [documentId]
     );

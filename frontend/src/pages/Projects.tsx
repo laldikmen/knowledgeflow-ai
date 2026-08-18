@@ -18,94 +18,27 @@ interface Project {
   risk: RiskLevel;
 }
 
-const FALLBACK_PROJECTS: Project[] = [
-  {
-    id: 1,
-    name: 'Project Alpha',
-    department: 'Software',
-    role: 'Manager',
-    confirmed: 24,
-    inProgress: 9,
-    overdue: 3,
-    documents: 8,
-    risk: 'Medium',
-  },
-  {
-    id: 2,
-    name: 'Project Beta',
-    department: 'Software',
-    role: 'Contributor',
-    confirmed: 31,
-    inProgress: 14,
-    overdue: 7,
-    documents: 12,
-    risk: 'High',
-  },
-  {
-    id: 3,
-    name: 'Onboarding Revamp',
-    department: 'People',
-    role: 'Viewer',
-    confirmed: 10,
-    inProgress: 3,
-    overdue: 0,
-    documents: 5,
-    risk: 'Low',
-  },
-  {
-    id: 4,
-    name: 'Data Migration',
-    department: 'Software',
-    role: 'Manager',
-    confirmed: 18,
-    inProgress: 6,
-    overdue: 4,
-    documents: 15,
-    risk: 'High',
-  },
-  {
-    id: 5,
-    name: 'Mobile App v3',
-    department: 'Product',
-    role: 'Manager',
-    confirmed: 21,
-    inProgress: 8,
-    overdue: 1,
-    documents: 9,
-    risk: 'Medium',
-  },
-  {
-    id: 6,
-    name: 'Q3 Compliance',
-    department: 'Legal',
-    role: 'Viewer',
-    confirmed: 7,
-    inProgress: 2,
-    overdue: 0,
-    documents: 6,
-    risk: 'Low',
-  },
-];
 
 const DEPARTMENTS = ['All departments', 'Software', 'Product', 'People', 'Legal'];
 
-const hasProjectCardData = (value: unknown): value is Project[] => {
-  if (!Array.isArray(value) || value.length === 0) return false;
-
-  return value.every((project) => {
-    if (!project || typeof project !== 'object') return false;
-
-    return (
-      'department' in project &&
-      'role' in project &&
-      'confirmed' in project &&
-      'inProgress' in project &&
-      'overdue' in project &&
-      'documents' in project &&
-      'risk' in project
-    );
-  });
+const toRole = (role?: string): ProjectRole => {
+  if (role === 'contributor') return 'Contributor';
+  if (role === 'viewer') return 'Viewer';
+  return 'Manager';
 };
+
+// Map a raw project record from the backend into the card shape used here.
+const mapProject = (raw: any): Project => ({
+  id: raw.id,
+  name: raw.name,
+  department: raw.department_name || '—',
+  role: toRole(raw.project_role),
+  confirmed: Number(raw.confirmed_task_count ?? 0),
+  inProgress: Number(raw.in_progress_task_count ?? 0),
+  overdue: Number(raw.overdue_task_count ?? 0),
+  documents: Number(raw.document_count ?? 0),
+  risk: (raw.risk_level as RiskLevel) || 'Low',
+});
 
 export const Projects: React.FC = () => {
   const navigate = useNavigate();
@@ -117,15 +50,11 @@ export const Projects: React.FC = () => {
     const fetchProjects = async () => {
       try {
         const response = await client.get('/projects');
-
-        setProjects(
-          hasProjectCardData(response.data)
-            ? response.data
-            : FALLBACK_PROJECTS,
-        );
+        const list = Array.isArray(response.data) ? response.data : [];
+        setProjects(list.map(mapProject));
       } catch (error) {
         console.error('Failed to fetch projects:', error);
-        setProjects(FALLBACK_PROJECTS);
+        setProjects([]);
       } finally {
         setIsLoading(false);
       }

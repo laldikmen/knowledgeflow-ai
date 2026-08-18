@@ -3,11 +3,18 @@ import client from '../api/client';
 import './UserManagement.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
-type UserRole =
-  | 'System Administrator'
-  | 'Project Manager'
-  | 'Contributor'
-  | 'Viewer';
+// The platform has exactly two system-level roles (see spec: System Administrator
+// or Member). Project-level roles (Manager/Contributor/Viewer) are assigned
+// separately through project membership.
+type UserRole = 'System Administrator' | 'Member';
+
+// Project-level roles are assigned per project (see spec).
+type ProjectRole = 'manager' | 'contributor' | 'viewer';
+
+const PROJECT_ROLES: ProjectRole[] = ['manager', 'contributor', 'viewer'];
+
+const projectRoleLabel = (role: ProjectRole) =>
+  role.charAt(0).toUpperCase() + role.slice(1);
 
 type AccountStatus = 'active' | 'inactive';
 
@@ -24,37 +31,42 @@ interface ManagedUser {
   initials: string;
   role: UserRole;
   projectIds: string[];
+  memberships: Record<string, ProjectRole>;
   status: AccountStatus;
 }
 
 interface UserFormState {
   fullName: string;
   email: string;
+  password: string;
   role: UserRole;
-  projectIds: string[];
+  // Map of projectId -> project role for the memberships being edited.
+  memberships: Record<string, ProjectRole>;
 }
 
-const PROJECTS: ProjectOption[] = [
-  { id: 'alpha', name: 'Project Alpha', shortName: 'Alpha' },
-  { id: 'beta', name: 'Project Beta', shortName: 'Beta' },
-  { id: 'data-migration', name: 'Data Migration', shortName: 'Data Migration' },
-  { id: 'mobile-v3', name: 'Mobile App v3', shortName: 'Mobile' },
-];
-
-const ROLES: UserRole[] = [
-  'System Administrator',
-  'Project Manager',
-  'Contributor',
-  'Viewer',
-];
-
+const ROLES: UserRole[] = ['System Administrator', 'Member'];
 
 const EMPTY_FORM: UserFormState = {
   fullName: '',
   email: '',
-  role: 'Contributor',
-  projectIds: [],
+  password: '',
+  role: 'Member',
+  memberships: {},
 };
+
+// Turn the form's membership map into the API payload.
+const membershipsPayload = (memberships: Record<string, ProjectRole>) =>
+  Object.entries(memberships).map(([project_id, project_role]) => ({
+    project_id: Number(project_id),
+    project_role,
+  }));
+
+// Map between the database system_role ('admin' | 'member') and the display role.
+const toDisplayRole = (systemRole: string): UserRole =>
+  systemRole === 'admin' ? 'System Administrator' : 'Member';
+
+const toSystemRole = (role: UserRole): 'admin' | 'member' =>
+  role === 'System Administrator' ? 'admin' : 'member';
 
 const getInitials = (name: string) => {
   const words = name
@@ -73,34 +85,57 @@ const roleClassName = (role: UserRole) =>
 
 export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [form, setForm] = useState<UserFormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [pendingCreate, setPendingCreate] = useState<UserFormState | null>(null);
   const [pendingStatusUser, setPendingStatusUser] = useState<ManagedUser | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await client.get('/users');
-        const managedUsers = response.data.map((user: any) => ({
+  const fetchData = async () => {
+    try {
+      const response = await client.get('/users');
+      const managedUsers = response.data.map((user: any) => {
+        const memberships: Record<string, ProjectRole> = {};
+        (user.memberships || []).forEach((m: any) => {
+          memberships[String(m.project_id)] = m.project_role;
+        });
+
+        return {
           id: user.id,
           name: user.name,
           email: user.email,
           initials: getInitials(user.name),
-          role: user.system_role as UserRole,
-          projectIds: user.project_ids || [],
-          status: user.status || 'active',
-        }));
-        setUsers(managedUsers);
-      } catch (error) {
-        console.error('Failed to load users', error);
-        setUsers([]);
-      }
-    };
+          role: toDisplayRole(user.system_role),
+          projectIds: (user.project_ids || []).map(String),
+          memberships,
+          status: (user.status || 'active') as AccountStatus,
+        };
+      });
+      setUsers(managedUsers);
+    } catch (error) {
+      console.error('Failed to load users', error);
+      setUsers([]);
+    }
 
-    fetchUsers();
+    try {
+      const projectsResponse = await client.get('/projects');
+      const projectOptions = projectsResponse.data.map((proj: any) => ({
+        id: proj.id.toString(),
+        name: proj.name,
+        shortName: proj.name,
+      }));
+      setProjects(projectOptions);
+    } catch (error) {
+      console.error('Failed to load projects', error);
+      setProjects([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
   const activeUsers = useMemo(
@@ -120,11 +155,25 @@ export const UserManagement: React.FC = () => {
     setForm({
       fullName: user.name,
       email: user.email,
+      password: '',
       role: user.role,
-      projectIds: [...user.projectIds],
+      memberships: { ...user.memberships },
     });
     setFormError('');
     setIsModalOpen(true);
+  };
+
+  // Set (or clear, when role is '') a project's membership role in the form.
+  const setProjectRole = (projectId: string, role: ProjectRole | '') => {
+    setForm((current) => {
+      const next = { ...current.memberships };
+      if (role === '') {
+        delete next[projectId];
+      } else {
+        next[projectId] = role;
+      }
+      return { ...current, memberships: next };
+    });
   };
 
   const closeModal = () => {
@@ -135,23 +184,10 @@ export const UserManagement: React.FC = () => {
   };
 
   const updateRole = (role: UserRole) => {
-    setForm((current) => ({
-      ...current,
-      role,
-      projectIds: role === 'System Administrator' ? [] : current.projectIds,
-    }));
+    setForm((current) => ({ ...current, role }));
   };
 
-  const toggleProject = (projectId: string) => {
-    setForm((current) => ({
-      ...current,
-      projectIds: current.projectIds.includes(projectId)
-        ? current.projectIds.filter((id) => id !== projectId)
-        : [...current.projectIds, projectId],
-    }));
-  };
-
-  const saveUser = (event: React.FormEvent) => {
+  const saveUser = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const fullName = form.fullName.trim();
@@ -176,58 +212,89 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
-    const normalisedForm: UserFormState = {
-      fullName,
-      email,
-      role: form.role,
-      projectIds:
-        form.role === 'System Administrator' ? [] : [...form.projectIds],
-    };
+    // Admins have global access, so they carry no explicit project memberships.
+    const memberships =
+      form.role === 'System Administrator'
+        ? []
+        : membershipsPayload(form.memberships);
 
+    // Editing an existing account — update it directly.
     if (editingUserId !== null) {
-      setUsers((current) =>
-        current.map((user) =>
-          user.id === editingUserId
-            ? {
-                ...user,
-                name: normalisedForm.fullName,
-                email: normalisedForm.email,
-                initials: getInitials(normalisedForm.fullName),
-                role: normalisedForm.role,
-                projectIds: normalisedForm.projectIds,
-              }
-            : user,
-        ),
-      );
-      closeModal();
+      setIsSaving(true);
+      try {
+        await client.put(`/users/${editingUserId}`, {
+          name: fullName,
+          email,
+          system_role: toSystemRole(form.role),
+        });
+        await client.put(`/users/${editingUserId}/memberships`, { memberships });
+        await fetchData();
+        closeModal();
+      } catch (error: any) {
+        setFormError(
+          error.response?.data?.error || 'Could not update the user. Try again.',
+        );
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
 
-    setPendingCreate(normalisedForm);
+    // Creating a new account requires an initial password.
+    if (form.password.trim().length < 6) {
+      setFormError('Set a temporary password of at least 6 characters.');
+      return;
+    }
+
+    setPendingCreate({
+      fullName,
+      email,
+      password: form.password,
+      role: form.role,
+      memberships: { ...form.memberships },
+    });
     setFormError('');
     setIsModalOpen(false);
   };
 
-  const confirmCreateUser = () => {
+  const confirmCreateUser = async () => {
     if (!pendingCreate) return;
 
-    setUsers((current) => [
-      ...current,
-      {
-        id: Math.max(0, ...current.map((user) => user.id)) + 1,
+    const memberships =
+      pendingCreate.role === 'System Administrator'
+        ? []
+        : membershipsPayload(pendingCreate.memberships);
+
+    setIsSaving(true);
+    try {
+      const created = await client.post('/users', {
         name: pendingCreate.fullName,
         email: pendingCreate.email,
-        initials: getInitials(pendingCreate.fullName),
-        role: pendingCreate.role,
-        projectIds: pendingCreate.projectIds,
-        status: 'active',
-      },
-    ]);
+        password: pendingCreate.password,
+        system_role: toSystemRole(pendingCreate.role),
+      });
 
-    setPendingCreate(null);
-    setEditingUserId(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
+      // Sync the new user's project memberships (skip if none / admin).
+      const newUserId = created.data?.id;
+      if (newUserId && memberships.length > 0) {
+        await client.put(`/users/${newUserId}/memberships`, { memberships });
+      }
+
+      await fetchData();
+      setPendingCreate(null);
+      setEditingUserId(null);
+      setForm(EMPTY_FORM);
+      setFormError('');
+    } catch (error: any) {
+      // Surface the error back on the form.
+      setFormError(
+        error.response?.data?.error || 'Could not create the user. Try again.',
+      );
+      setPendingCreate(null);
+      setIsModalOpen(true);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const returnToCreateForm = () => {
@@ -235,20 +302,24 @@ export const UserManagement: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const confirmStatusChange = () => {
+  const confirmStatusChange = async () => {
     if (!pendingStatusUser) return;
 
-    setUsers((current) =>
-      current.map((user) =>
-        user.id === pendingStatusUser.id
-          ? {
-              ...user,
-              status: user.status === 'active' ? 'inactive' : 'active',
-            }
-          : user,
-      ),
-    );
-    setPendingStatusUser(null);
+    const nextStatus =
+      pendingStatusUser.status === 'active' ? 'inactive' : 'active';
+
+    setIsSaving(true);
+    try {
+      await client.patch(`/users/${pendingStatusUser.id}/status`, {
+        status: nextStatus,
+      });
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to update user status', error);
+    } finally {
+      setIsSaving(false);
+      setPendingStatusUser(null);
+    }
   };
 
   const getProjectNames = (user: ManagedUser) => {
@@ -257,7 +328,7 @@ export const UserManagement: React.FC = () => {
 
     return user.projectIds
       .map((projectId) =>
-        PROJECTS.find((project) => project.id === projectId)?.shortName,
+        projects.find((project) => project.id === projectId)?.shortName,
       )
       .filter(Boolean)
       .join(', ');
@@ -269,7 +340,7 @@ export const UserManagement: React.FC = () => {
         <div>
           <h1>User Management</h1>
           <p>
-            {users.length} users · {activeUsers} active · {PROJECTS.length} projects
+            {users.length} users · {activeUsers} active · {projects.length} projects
           </p>
         </div>
 
@@ -349,12 +420,6 @@ export const UserManagement: React.FC = () => {
                           : 'user-management-action--success'
                       }
                       onClick={() => setPendingStatusUser(user)}
-                      disabled={user.role === 'System Administrator'}
-                      title={
-                        user.role === 'System Administrator'
-                          ? 'The primary administrator cannot be deactivated.'
-                          : undefined
-                      }
                     >
                       {user.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
@@ -362,6 +427,14 @@ export const UserManagement: React.FC = () => {
                 </td>
               </tr>
             ))}
+
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={5} className="user-management-empty">
+                  No users yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -427,6 +500,23 @@ export const UserManagement: React.FC = () => {
                 </label>
               </div>
 
+              {editingUserId === null && (
+                <label className="user-management-field user-management-field--full">
+                  <span>Temporary password</span>
+                  <input
+                    type="password"
+                    value={form.password}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        password: event.target.value,
+                      }))
+                    }
+                    placeholder="At least 6 characters"
+                  />
+                </label>
+              )}
+
               <label className="user-management-field user-management-field--full">
                 <span>System role</span>
                 <select
@@ -441,44 +531,44 @@ export const UserManagement: React.FC = () => {
                 </select>
               </label>
 
-              <div className="user-management-role-options" aria-label="Select user role">
-                {ROLES.map((role) => (
-                  <button
-                    type="button"
-                    key={role}
-                    className={form.role === role ? 'active' : ''}
-                    aria-pressed={form.role === role}
-                    onClick={() => updateRole(role)}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
-
-              <fieldset
-                className="user-management-project-fieldset"
-                disabled={form.role === 'System Administrator'}
-              >
-                <legend>Project memberships</legend>
-                <p>
-                  {form.role === 'System Administrator'
-                    ? 'System Administrators automatically have access to every project.'
-                    : 'Choose the projects this user can access.'}
+              {form.role === 'System Administrator' ? (
+                <p className="user-management-role-hint">
+                  System Administrators have global access to every project.
                 </p>
+              ) : (
+                <fieldset className="user-management-project-fieldset">
+                  <legend>Project roles</legend>
+                  <p>Choose this member’s role in each project. Leave as “No access” to exclude them.</p>
 
-                <div className="user-management-project-options">
-                  {PROJECTS.map((project) => (
-                    <label key={project.id}>
-                      <input
-                        type="checkbox"
-                        checked={form.projectIds.includes(project.id)}
-                        onChange={() => toggleProject(project.id)}
-                      />
-                      <span>{project.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+                  {projects.length === 0 && (
+                    <p className="user-management-role-hint">No projects available yet.</p>
+                  )}
+
+                  <div className="user-management-project-options">
+                    {projects.map((project) => (
+                      <div key={project.id} className="user-management-project-row">
+                        <span>{project.name}</span>
+                        <select
+                          value={form.memberships[project.id] ?? ''}
+                          onChange={(event) =>
+                            setProjectRole(
+                              project.id,
+                              event.target.value as ProjectRole | '',
+                            )
+                          }
+                        >
+                          <option value="">No access</option>
+                          {PROJECT_ROLES.map((role) => (
+                            <option key={role} value={role}>
+                              {projectRoleLabel(role)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
 
               {formError && <div className="user-management-form-error">{formError}</div>}
 
@@ -493,8 +583,9 @@ export const UserManagement: React.FC = () => {
                 <button
                   type="submit"
                   className="user-management-button user-management-button--primary"
+                  disabled={isSaving}
                 >
-                  {editingUserId === null ? 'Create & send invite' : 'Save changes'}
+                  {editingUserId === null ? 'Create user' : 'Save changes'}
                 </button>
               </div>
             </form>
@@ -509,7 +600,7 @@ export const UserManagement: React.FC = () => {
           pendingCreate ? (
             <p>
               An active account will be created for <strong>{pendingCreate.fullName}</strong>{' '}
-              and an invitation will be sent to {pendingCreate.email}.
+              ({pendingCreate.email}).
             </p>
           ) : null
         }
@@ -517,25 +608,10 @@ export const UserManagement: React.FC = () => {
           pendingCreate ? (
             <div className="user-management-confirm-summary">
               <div><span>System role</span><strong>{pendingCreate.role}</strong></div>
-              <div>
-                <span>Project access</span>
-                <strong>
-                  {pendingCreate.role === 'System Administrator'
-                    ? 'All projects'
-                    : pendingCreate.projectIds.length > 0
-                      ? pendingCreate.projectIds
-                          .map((projectId) =>
-                            PROJECTS.find((project) => project.id === projectId)?.name,
-                          )
-                          .filter(Boolean)
-                          .join(', ')
-                      : 'No projects assigned'}
-                </strong>
-              </div>
             </div>
           ) : null
         }
-        confirmLabel="Create & send invite"
+        confirmLabel="Create user"
         cancelLabel="Back"
         tone="default"
         onClose={returnToCreateForm}

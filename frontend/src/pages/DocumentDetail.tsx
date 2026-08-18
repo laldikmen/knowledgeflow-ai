@@ -158,7 +158,6 @@ interface DocumentDetailProps {
 
 export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   currentUserRole = 'Viewer',
-  currentUserName = 'User',
 }) => {
   const navigate = useNavigate();
   const { documentId } = useParams<{ documentId: string }>();
@@ -175,8 +174,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [editingActionId, setEditingActionId] = useState<number | null>(null);
   const canReview = canReviewAiContent(currentUserRole);
 
-  useEffect(() => {
-    const fetchDocument = async () => {
+  const loadDocument = async () => {
       setIsLoading(true);
       try {
         const response = await client.get(`/documents/${numericDocumentId}`);
@@ -210,7 +208,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           summary: data.summary
             ? {
                 text: data.summary.text,
-                confidence: data.summary.confidence,
+                confidence: Number(data.summary.confidence) || 0,
                 status: data.summary.status || 'draft',
               }
             : undefined,
@@ -218,7 +216,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             id: decision.id,
             text: decision.text,
             source: decision.source,
-            confidence: decision.confidence,
+            confidence: Number(decision.confidence) || 0,
             status: decision.status || 'draft',
             confirmedBy: decision.confirmed_by,
             confirmedDate: decision.confirmed_date,
@@ -249,10 +247,11 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
       } finally {
         setIsLoading(false);
       }
-    };
+  };
 
+  useEffect(() => {
     if (numericDocumentId) {
-      fetchDocument();
+      loadDocument();
     }
     setEditingTarget(null);
     setPendingActionReview(null);
@@ -303,30 +302,30 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     );
   }
 
-  const updateSummaryStatus = (status: ReviewStatus) => {
-    setDocument((current) => {
-      if (!current?.summary) return current;
-      return { ...current, summary: { ...current.summary, status } };
-    });
+  // Human review of the AI-generated summary (admin/manager only). Confirm marks
+  // it an official record; reject sends it back. Persisted, then re-fetched.
+  const updateSummaryStatus = async (status: ReviewStatus) => {
+    if (status !== 'confirmed' && status !== 'rejected') return;
+    try {
+      await client.post(`/ai/summary/${numericDocumentId}/review`, {
+        review_status: status,
+      });
+      await loadDocument();
+    } catch (error) {
+      console.error('Failed to review summary', error);
+    }
   };
 
-  const updateDecisionStatus = (id: number, status: ReviewStatus) => {
-    setDocument((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        decisions: current.decisions.map((decision) =>
-          decision.id === id
-            ? {
-                ...decision,
-                status,
-                confirmedBy: status === 'confirmed' ? currentUserName : decision.confirmedBy,
-                confirmedDate: status === 'confirmed' ? 'Today' : decision.confirmedDate,
-              }
-            : decision,
-        ),
-      };
-    });
+  const updateDecisionStatus = async (id: number, status: ReviewStatus) => {
+    if (status !== 'confirmed' && status !== 'rejected') return;
+    try {
+      await client.post(`/ai/decision/${id}/review`, {
+        review_status: status,
+      });
+      await loadDocument();
+    } catch (error) {
+      console.error('Failed to review decision', error);
+    }
   };
 
   const updateActionStatus = (

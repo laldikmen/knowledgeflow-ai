@@ -1,14 +1,12 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
-import AWS from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 
-const bedrock = new AWS.Bedrock({
-  region: process.env.S3_REGION || 'us-east-1',
-});
-
-const bedrockRuntime = new AWS.BedrockRuntime({
-  region: process.env.S3_REGION || 'us-east-1',
-});
+// TODO: Bedrock initialization - use bedrock-runtime library instead of aws-sdk v2
+// const bedrock = new AWS.Bedrock({...});
+// const bedrockRuntime = new AWS.BedrockRuntime({
+//   region: process.env.S3_REGION || 'us-east-1',
+// });
 
 interface ClaudeResponse {
   content: Array<{
@@ -48,27 +46,10 @@ async function callBedrock(prompt: string): Promise<string> {
       return 'Based on the available documents in this project, I can see information about meetings, decisions, and tasks. For a more specific answer, could you rephrase your question to be more specific about what you\'re looking for (e.g., "What were the decisions?", "Who is responsible?", "What are the deadlines?")?';
     }
 
-    // Real Bedrock API call
-    const params = {
-      modelId: 'anthropic.claude-3-sonnet-20240229-v1:0',
-      contentType: 'application/json',
-      accept: 'application/json',
-      body: JSON.stringify({
-        anthropic_version: 'bedrock-2023-06-01',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    };
-
-    const response = await bedrockRuntime.invokeModel(params).promise();
-    const body = JSON.parse(response.body?.toString() || '{}') as ClaudeResponse;
-    const text = body.content[0]?.text || '';
-    return text;
+    // TODO: Real Bedrock API call - implement when bedrock-runtime library is installed
+    // const params = { ... };
+    // const response = await bedrockRuntime.invokeModel(params).promise();
+    throw new Error('Bedrock API not configured. Set NODE_ENV=development for mock responses.');
   } catch (error) {
     console.error('Bedrock API error:', error);
     throw new Error('Failed to call Bedrock API');

@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
-import AWS from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 import { randomUUID } from 'crypto';
+import { extractText } from '../utils/textExtraction';
 
 const s3 = new AWS.S3({
   region: process.env.S3_REGION || 'us-east-1',
@@ -9,7 +10,9 @@ const s3 = new AWS.S3({
 
 export const uploadDocument = async (req: Request, res: Response) => {
   try {
-    const { projectId, title, document_type, description } = req.body;
+    const { title, document_type, description } = req.body;
+    // The frontend sends project_id (snake_case); accept both spellings.
+    const projectId = req.body.project_id ?? req.body.projectId;
 
     if (!req.user) {
       return res.status(401).json({
@@ -22,6 +25,13 @@ export const uploadDocument = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'No file uploaded',
+      });
+    }
+
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Project is required',
       });
     }
 
@@ -61,24 +71,49 @@ export const uploadDocument = async (req: Request, res: Response) => {
     const s3Key = `projects/${projectId}/documents/${fileName}`;
 
     // Upload to S3
+    const bucket = process.env.S3_BUCKET || 'knowledgeflow-documents';
+    const region = process.env.S3_REGION || 'us-east-1';
     const uploadParams = {
-      Bucket: process.env.S3_BUCKET || 'knowledgeflow-documents',
+      Bucket: bucket,
       Key: s3Key,
       Body: req.file.buffer,
       ContentType: req.file.mimetype,
     };
 
+    // @ts-ignore
     await s3.upload(uploadParams).promise();
+
+    const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
 
     // Save metadata to database
     const result = await query(
-      `INSERT INTO documents (project_id, uploaded_by, title, description, file_name, file_type, document_type, s3_key, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'uploaded')
+      `INSERT INTO documents (project_id, uploaded_by, title, description, file_name, file_type, document_type, s3_key, s3_url, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'uploaded')
        RETURNING id, title, file_name, document_type, status, uploaded_at`,
-      [projectId, req.user.id, title || req.file.originalname, description, req.file.originalname, req.file.mimetype, document_type, s3Key]
+      [projectId, req.user.id, title || req.file.originalname, description, req.file.originalname, req.file.mimetype, document_type, s3Key, s3Url]
     );
 
     const document = result.rows[0];
+
+    // Extract the document's text so it's ready for AI processing (Bedrock).
+    // Wrapped so a parse failure never fails the upload itself.
+    try {
+      const extracted = await extractText(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+      );
+      if (extracted) {
+        await query(
+          `INSERT INTO document_texts (document_id, extracted_text)
+           VALUES ($1, $2)
+           ON CONFLICT (document_id) DO UPDATE SET extracted_text = $2, updated_at = NOW()`,
+          [document.id, extracted],
+        );
+      }
+    } catch (extractionError) {
+      console.error('Text extraction step failed:', extractionError);
+    }
 
     return res.status(201).json({
       success: true,
@@ -90,6 +125,54 @@ export const uploadDocument = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to upload document',
+    });
+  }
+};
+
+// List all documents the current user can access: admins see every document,
+// members see documents in the projects they belong to.
+export const getAllDocuments = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated',
+      });
+    }
+
+    const isAdmin = req.user.system_role === 'admin';
+
+    const base = `
+      SELECT
+        d.id, d.title, d.description, d.file_name, d.file_type, d.document_type,
+        d.status, d.project_id,
+        p.name AS project_name,
+        u.name AS uploaded_by,
+        d.uploaded_at AS created_at
+      FROM documents d
+      LEFT JOIN users u ON d.uploaded_by = u.id
+      LEFT JOIN projects p ON d.project_id = p.id
+    `;
+
+    const sql = isAdmin
+      ? `${base} ORDER BY d.uploaded_at DESC`
+      : `${base}
+         WHERE d.project_id IN (
+           SELECT project_id FROM project_members WHERE user_id = $1
+         )
+         ORDER BY d.uploaded_at DESC`;
+
+    const result = await query(sql, isAdmin ? [] : [req.user.id]);
+
+    return res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error('Get all documents error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
     });
   }
 };
@@ -189,24 +272,46 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
       });
     }
 
-    // Get AI-generated content
-    const aiResult = await query(
-      `SELECT
-        s.summary_text, s.review_status as summary_review_status, s.ai_confidence as summary_confidence,
-        d2.decision_text, d2.review_status as decision_review_status, d2.ai_confidence as decision_confidence
-      FROM documents doc
-      LEFT JOIN ai_summaries s ON doc.id = s.document_id
-      LEFT JOIN decisions d2 ON doc.id = d2.document_id
-      WHERE doc.id = $1`,
+    // Viewers may only see confirmed AI content; contributors/managers/admins
+    // can also see drafts (enforced here, not just in the UI).
+    const isViewer =
+      document.project_role === 'viewer' && req.user.system_role !== 'admin';
+
+    // AI-generated summary for this document (draft until a human confirms it).
+    const summaryResult = await query(
+      `SELECT id, summary_text, review_status, ai_confidence
+       FROM ai_summaries WHERE document_id = $1`,
       [documentId]
     );
 
-    if (aiResult.rows.length > 0) {
-      document.ai_summary = aiResult.rows[0].summary_text;
-      document.summary_review_status = aiResult.rows[0].summary_review_status;
-      document.summary_confidence = aiResult.rows[0].summary_confidence;
-      document.decisions = aiResult.rows.filter(row => row.decision_text);
-    }
+    const summaryRow = summaryResult.rows[0];
+    document.summary =
+      summaryRow && (!isViewer || summaryRow.review_status === 'confirmed')
+        ? {
+            id: summaryRow.id,
+            text: summaryRow.summary_text,
+            status: summaryRow.review_status,
+            confidence: summaryRow.ai_confidence,
+          }
+        : null;
+
+    // AI-extracted decisions (each carries its own id + review status).
+    const decisionsResult = await query(
+      `SELECT id, decision_text, source_excerpt, review_status, ai_confidence, reviewed_by
+       FROM decisions WHERE document_id = $1
+       ORDER BY id ASC`,
+      [documentId]
+    );
+
+    document.decisions = decisionsResult.rows
+      .filter((row) => !isViewer || row.review_status === 'confirmed')
+      .map((row) => ({
+        id: row.id,
+        text: row.decision_text,
+        source: row.source_excerpt,
+        status: row.review_status,
+        confidence: row.ai_confidence,
+      }));
 
     return res.json({
       success: true,
@@ -266,10 +371,12 @@ export const deleteDocument = async (req: Request, res: Response) => {
 
     // Delete from S3
     if (document.s3_key) {
-      await s3.deleteObject({
+      const deleteParams = {
         Bucket: process.env.S3_BUCKET || 'knowledgeflow-documents',
         Key: document.s3_key,
-      }).promise();
+      };
+      // @ts-ignore
+      await s3.deleteObject(deleteParams).promise();
     }
 
     // Delete from database (cascade will handle related records)

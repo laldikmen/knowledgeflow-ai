@@ -9,6 +9,8 @@ import taskRoutes from './routes/tasks';
 import aiRoutes from './routes/ai';
 import chatRoutes from './routes/chat';
 import dashboardRoutes from './routes/dashboard';
+import userRoutes from './routes/users';
+import timelineRoutes from './routes/timeline';
 
 dotenv.config();
 
@@ -17,7 +19,14 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Parse anything that is NOT a multipart upload as JSON so request bodies are
+// always parsed regardless of a varying/missing Content-Type (matches lambda.ts).
+app.use(
+  express.json({
+    type: (req) =>
+      !(req.headers['content-type'] || '').includes('multipart/form-data'),
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
@@ -25,6 +34,8 @@ app.use('/auth', authRoutes);
 app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes);
 app.use('/tasks', taskRoutes);
+app.use('/users', userRoutes);
+app.use('/timeline', timelineRoutes);
 app.use('/ai', aiRoutes);
 app.use('/ai/chat', chatRoutes);
 app.use('/dashboard', dashboardRoutes);

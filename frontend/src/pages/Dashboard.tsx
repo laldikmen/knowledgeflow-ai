@@ -6,31 +6,79 @@ export const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [risks, setRisks] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    recentUploads: 0,
+    confirmedTasks: 0,
+    inProgress: 0,
+    overdueTasks: 0,
+    upcomingDeadlines: 0,
+    draftTasks: 0,
+    highRiskProjects: 0,
+  });
 
   useEffect(() => {
+    const initials = (name?: string) => {
+      const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return 'U';
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    };
+
+    const formatDate = (value?: string) => {
+      if (!value) return '';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
     const fetchDashboardData = async () => {
       try {
-        const activitiesResponse = await client.get('/dashboard/activity');
-        const activitiesData = activitiesResponse.data.map((activity: any) => ({
-          avatar: activity.avatar,
-          name: activity.name,
-          action: activity.action,
-          highlight: activity.highlight,
-          details: activity.details,
-          timestamp: activity.timestamp,
-          status: activity.status,
-          statusType: activity.status_type,
-        }));
-        setRecentActivities(activitiesData);
+        const response = await client.get('/dashboard');
+        const data = response.data || {};
 
-        const risksResponse = await client.get('/dashboard/risks');
-        const risksData = risksResponse.data.map((risk: any) => ({
-          name: risk.name,
-          level: risk.level,
-          type: risk.type,
-          width: `${(risk.value || 50) * 100}%`,
-        }));
-        setRisks(risksData);
+        const recentUploads = data.recent_uploads || [];
+        const highRisk = data.high_risk_projects || [];
+        const summary = data.summary || {};
+
+        // Recent activity feed from recent uploads
+        setRecentActivities(
+          recentUploads.map((doc: any) => ({
+            avatar: initials(doc.uploaded_by_name),
+            name: doc.uploaded_by_name || 'Someone',
+            action: 'uploaded',
+            highlight: doc.title,
+            details: doc.project_name,
+            timestamp: formatDate(doc.uploaded_at),
+            status: doc.status,
+            statusType: doc.status === 'processed' ? 'green' : 'default',
+          })),
+        );
+
+        // Project risk overview from high-risk projects
+        setRisks(
+          highRisk.map((project: any) => {
+            const active = Number(project.active_tasks) || 1;
+            const high = Number(project.high_risk_count) || 0;
+            const ratio = Math.min(1, Math.max(0.15, high / active));
+            return {
+              name: project.name,
+              level: 'High',
+              type: 'high',
+              width: `${Math.round(ratio * 100)}%`,
+            };
+          }),
+        );
+
+        setStats({
+          recentUploads: recentUploads.length,
+          confirmedTasks: (data.confirmed_tasks || []).length,
+          inProgress: (data.in_progress_tasks || []).length,
+          overdueTasks: Number(summary.overdue_count) || 0,
+          upcomingDeadlines: Number(summary.tasks_due_this_week) || 0,
+          draftTasks: (data.draft_tasks || []).length,
+          highRiskProjects: highRisk.length,
+        });
       } catch (error) {
         console.error('Failed to load dashboard data', error);
         setRecentActivities([]);
@@ -52,26 +100,20 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-stats">
         <article className="dashboard-stat-card">
           <div className="dashboard-stat-title">Recent uploads (7d)</div>
-          <span className="dashboard-stat-badge dashboard-stat-badge--green">
-            +4
-          </span>
-          <div className="dashboard-stat-value">12</div>
+          <div className="dashboard-stat-value">{stats.recentUploads}</div>
         </article>
 
         <article className="dashboard-stat-card">
           <div className="dashboard-stat-title">Confirmed tasks</div>
           <div className="dashboard-stat-value-row">
-            <div className="dashboard-stat-value">24</div>
+            <div className="dashboard-stat-value">{stats.confirmedTasks}</div>
             <span className="dashboard-stat-subtitle">pending</span>
           </div>
         </article>
 
         <article className="dashboard-stat-card">
           <div className="dashboard-stat-title">In progress</div>
-          <span className="dashboard-stat-badge dashboard-stat-badge--green">
-            +2
-          </span>
-          <div className="dashboard-stat-value">9</div>
+          <div className="dashboard-stat-value">{stats.inProgress}</div>
         </article>
 
         <article className="dashboard-stat-card dashboard-stat-card--dark">
@@ -79,14 +121,12 @@ export const Dashboard: React.FC = () => {
           <span className="dashboard-stat-badge dashboard-stat-badge--dark">
             needs action
           </span>
-          <div className="dashboard-stat-value">3</div>
+          <div className="dashboard-stat-value">{stats.overdueTasks}</div>
         </article>
 
         <article className="dashboard-stat-card">
-          <div className="dashboard-stat-title">
-            Upcoming deadlines (7d)
-          </div>
-          <div className="dashboard-stat-value">5</div>
+          <div className="dashboard-stat-title">Upcoming deadlines (7d)</div>
+          <div className="dashboard-stat-value">{stats.upcomingDeadlines}</div>
         </article>
 
         <article className="dashboard-stat-card dashboard-stat-card--yellow">
@@ -94,15 +134,12 @@ export const Dashboard: React.FC = () => {
           <span className="dashboard-stat-badge dashboard-stat-badge--manager">
             Manager
           </span>
-          <div className="dashboard-stat-value">6</div>
+          <div className="dashboard-stat-value">{stats.draftTasks}</div>
         </article>
 
         <article className="dashboard-stat-card">
           <div className="dashboard-stat-title">High-risk projects</div>
-          <span className="dashboard-stat-badge dashboard-stat-badge--red">
-            +1
-          </span>
-          <div className="dashboard-stat-value">2</div>
+          <div className="dashboard-stat-value">{stats.highRiskProjects}</div>
         </article>
       </div>
 
@@ -179,23 +216,13 @@ export const Dashboard: React.FC = () => {
             ))}
           </div>
 
-          <div className="dashboard-deadlines">
-            <div className="dashboard-deadlines-title">
-              Upcoming deadlines
+          {risks.length > 0 && (
+            <div className="dashboard-deadlines">
+              <div className="dashboard-deadlines-title">
+                Upcoming deadlines
+              </div>
             </div>
-
-            <div className="dashboard-deadline-row">
-              <span>Create upload API</span>
-              <span className="dashboard-deadline-date">Jul 20</span>
-            </div>
-
-            <div className="dashboard-deadline-row">
-              <span>Prepare frontend wireframe</span>
-              <span className="dashboard-deadline-overdue">
-                Overdue · Jul 8
-              </span>
-            </div>
-          </div>
+          )}
         </section>
       </div>
     </div>

@@ -164,6 +164,20 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const [pendingAction, setPendingAction] = useState<PendingTaskAction | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
+  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await client.get('/users');
+        setUsers((response.data || []).map((u: any) => ({ id: u.id, name: u.name })));
+      } catch (error) {
+        console.error('Failed to load users', error);
+        setUsers([]);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const loadTask = async () => {
     setIsLoading(true);
@@ -346,43 +360,29 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     projectName: task.projectName,
   };
 
-  const saveTaskEdit = (values: TaskEditValues) => {
-    setTask((current) => {
-      if (!current) return current;
+  const saveTaskEdit = async (values: TaskEditValues) => {
+    if (!task) return;
 
-      const ownerParts = values.owner.split(/\s+/).filter(Boolean);
-      const ownerInitials =
-        ownerParts.length > 1
-          ? `${ownerParts[0][0]}${ownerParts[ownerParts.length - 1][0]}`.toUpperCase()
-          : ownerParts[0]?.slice(0, 2).toUpperCase() || current.ownerInitials;
-      const nextHistoryId =
-        current.history.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+    // Resolve the selected owner name to a real user id so the task is assigned
+    // to an actual account (unassigned if the name doesn't match a user).
+    const matchedUser = users.find(
+      (u) => u.name.trim().toLowerCase() === values.owner.trim().toLowerCase(),
+    );
 
-      return {
-        ...current,
-        title: values.title,
+    try {
+      await client.put(`/tasks/${task.id}`, {
+        task_title: values.title,
         description: values.description,
-        sourceReference: values.sourceContext,
-        ownerName: values.owner,
-        ownerInitials,
-        deadline: values.deadline || undefined,
-        risk: values.risk,
-        projectName: values.projectName,
-        status: 'draft',
-        history: [
-          ...current.history,
-          {
-            id: nextHistoryId,
-            status: 'draft',
-            title: `Draft edited by ${currentUserName}`,
-            detail: 'Task details updated and returned to Draft',
-            date: 'Today',
-          },
-        ],
-      };
-    });
-
-    setShowEditModal(false);
+        assigned_to_user_id: matchedUser ? matchedUser.id : null,
+        deadline: values.deadline || null,
+        risk_level: values.risk,
+      });
+      await loadTask();
+    } catch (error) {
+      console.error('Failed to save task', error);
+    } finally {
+      setShowEditModal(false);
+    }
   };
 
   const showStart = task.status === 'confirmed' && canExecute;

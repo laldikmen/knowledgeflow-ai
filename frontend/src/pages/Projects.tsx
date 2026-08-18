@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import './Projects.css';
 
@@ -42,26 +42,69 @@ const mapProject = (raw: any): Project => ({
 
 export const Projects: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeDepartment, setActiveDepartment] = useState('All departments');
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: '', department_name: '', description: '' });
+  const [createError, setCreateError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await client.get('/projects');
+      const list = Array.isArray(response.data) ? response.data : [];
+      setProjects(list.map(mapProject));
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+      setProjects([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const response = await client.get('/projects');
-        const list = Array.isArray(response.data) ? response.data : [];
-        setProjects(list.map(mapProject));
-      } catch (error) {
-        console.error('Failed to fetch projects:', error);
-        setProjects([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchProjects();
   }, []);
+
+  // The header's "Create Project" button navigates here with ?new=1.
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      openCreateModal();
+      searchParams.delete('new');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const openCreateModal = () => {
+    setCreateForm({ name: '', department_name: '', description: '' });
+    setCreateError('');
+    setIsCreateOpen(true);
+  };
+
+  const submitCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!createForm.name.trim()) {
+      setCreateError('Project name is required.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await client.post('/projects', {
+        name: createForm.name.trim(),
+        department_name: createForm.department_name.trim() || undefined,
+        description: createForm.description.trim() || undefined,
+      });
+      await fetchProjects();
+      setIsCreateOpen(false);
+    } catch (error: any) {
+      setCreateError(error.response?.data?.error || 'Could not create the project.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const filteredProjects = useMemo(() => {
     if (activeDepartment === 'All departments') {
@@ -168,6 +211,63 @@ export const Projects: React.FC = () => {
         <div className="projects-empty">
           <h2>No projects found</h2>
           <p>There are no projects in this department.</p>
+        </div>
+      )}
+
+      {isCreateOpen && (
+        <div
+          className="project-create-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCreateOpen(false);
+          }}
+        >
+          <form className="project-create-modal" onSubmit={submitCreate} role="dialog" aria-modal="true">
+            <div className="project-create-header">
+              <h2>Create project</h2>
+              <button type="button" aria-label="Close" onClick={() => setIsCreateOpen(false)}>×</button>
+            </div>
+
+            <label className="project-create-field">
+              <span>Project name</span>
+              <input
+                value={createForm.name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Project Gamma"
+                autoFocus
+              />
+            </label>
+
+            <label className="project-create-field">
+              <span>Department</span>
+              <input
+                value={createForm.department_name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, department_name: e.target.value }))}
+                placeholder="Software"
+              />
+            </label>
+
+            <label className="project-create-field">
+              <span>Description</span>
+              <textarea
+                rows={3}
+                value={createForm.description}
+                onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="What is this project about?"
+              />
+            </label>
+
+            {createError && <div className="project-create-error">{createError}</div>}
+
+            <div className="project-create-actions">
+              <button type="button" className="project-create-btn project-create-btn--secondary" onClick={() => setIsCreateOpen(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="project-create-btn project-create-btn--primary" disabled={isSaving}>
+                Create project
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </section>

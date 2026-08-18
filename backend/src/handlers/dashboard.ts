@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
+import { computeProjectRisk } from '../utils/risk';
 
 export const getDashboard = async (req: Request, res: Response) => {
   try {
@@ -177,20 +178,32 @@ export const getDashboard = async (req: Request, res: Response) => {
       projectIds
     );
 
-    // High-risk projects (have high-risk tasks)
-    const highRiskProjects = await query(
-      `SELECT DISTINCT
-        p.id, p.name, p.department_name,
-        COUNT(CASE WHEN a.risk_level = 'high' THEN 1 END) as high_risk_count,
-        COUNT(CASE WHEN a.status IN ('confirmed', 'in_progress') THEN 1 END) as active_tasks
-      FROM projects p
-      LEFT JOIN action_items a ON p.id = a.project_id
-      WHERE p.id IN (${placeholders})
-      GROUP BY p.id, p.name, p.department_name
-      HAVING COUNT(CASE WHEN a.risk_level = 'high' THEN 1 END) > 0
-      ORDER BY high_risk_count DESC`,
+    // Project risk from the basic leading-indicator model (overdue, imminent
+    // deadlines, high-risk tasks, unassigned work). Surfaces Medium/High projects.
+    const projectMeta = await query(
+      `SELECT id, name, department_name FROM projects WHERE id IN (${placeholders})`,
       projectIds
     );
+    const riskMap = await computeProjectRisk(projectIds);
+    const highRiskProjects = {
+      rows: projectMeta.rows
+        .map((p) => {
+          const risk = riskMap.get(p.id);
+          return {
+            id: p.id,
+            name: p.name,
+            department_name: p.department_name,
+            risk_level: risk?.level ?? 'Low',
+            risk_score: risk?.score ?? 0,
+            overdue: risk?.overdue ?? 0,
+            due_soon: risk?.due_soon_unstarted ?? 0,
+            high_risk_count: risk?.high_risk ?? 0,
+            unassigned: risk?.unassigned ?? 0,
+          };
+        })
+        .filter((p) => p.risk_level !== 'Low')
+        .sort((a, b) => b.risk_score - a.risk_score),
+    };
 
     // Summary statistics
     const totalStats = await query(

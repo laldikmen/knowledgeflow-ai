@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
+import { computeSingleProjectRisk } from '../utils/risk';
 
 export const getAccessibleProjects = async (req: Request, res: Response) => {
   try {
@@ -128,6 +129,11 @@ export const getProjectDetail = async (req: Request, res: Response) => {
     );
 
     project.members = membersResult.rows;
+
+    // Computed risk level for the risk chip (basic leading-indicator model).
+    const risk = await computeSingleProjectRisk(Number(projectId));
+    project.risk_level = risk.level;
+    project.risk_detail = risk;
 
     return res.json({
       success: true,
@@ -259,6 +265,60 @@ export const addProjectMember = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Add project member error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+};
+
+// Remove a member from a project (admin or the project's manager).
+export const removeProjectMember = async (req: Request, res: Response) => {
+  try {
+    const { projectId, userId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated',
+      });
+    }
+
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [projectId, req.user.id]
+    );
+
+    const isAdmin = req.user.system_role === 'admin';
+    const isManager =
+      accessResult.rows.length > 0 && accessResult.rows[0].project_role === 'manager';
+
+    if (!isAdmin && !isManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins and project managers can remove members',
+      });
+    }
+
+    const result = await query(
+      `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2 RETURNING id`,
+      [projectId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Member not found on this project',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Member removed successfully',
+    });
+  } catch (error) {
+    console.error('Remove project member error:', error);
     res.status(500).json({
       success: false,
       error: 'Internal server error',

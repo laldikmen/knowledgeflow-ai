@@ -26,6 +26,7 @@ interface Task {
   status: TaskStatus;
   risk?: TaskRisk;
   overdue?: boolean;
+  atRisk?: boolean;
 }
 
 interface BoardColumn {
@@ -97,6 +98,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
         status: task.status || 'draft',
         risk: task.risk_level || 'medium',
         overdue: Number(task.overdue_days) > 0,
+        atRisk: Boolean(task.is_at_risk),
       }));
       setTasks(tasksData);
     } catch (error) {
@@ -172,7 +174,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
       key={task.id}
       className={`tracker-task-card tracker-task-card--${task.status} ${
         task.overdue ? 'tracker-task-card--overdue' : ''
-      }`}
+      } ${task.atRisk && !task.overdue ? 'tracker-task-card--at-risk' : ''}`}
       role="button"
       tabIndex={0}
       aria-label={`Open task: ${task.title}`}
@@ -188,6 +190,13 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
         <div className="tracker-overdue-label">
           <span className="tracker-overdue-dot" />
           Overdue
+        </div>
+      )}
+
+      {task.atRisk && !task.overdue && (
+        <div className="tracker-at-risk-label">
+          <span className="tracker-at-risk-dot" />
+          At risk
         </div>
       )}
 

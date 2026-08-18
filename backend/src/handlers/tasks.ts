@@ -78,6 +78,67 @@ export const createTask = async (req: Request, res: Response) => {
   }
 };
 
+// List all tasks the current user can access: admins see every task, members
+// see tasks in the projects they belong to.
+export const getAllTasks = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated',
+      });
+    }
+
+    const isAdmin = req.user.system_role === 'admin';
+
+    const base = `
+      SELECT
+        a.id,
+        a.task_title AS title,
+        a.description,
+        REPLACE(a.status, '_', '-') AS status,
+        a.risk_level,
+        a.project_id,
+        p.name AS project_name,
+        a.assigned_to_user_id,
+        u.name AS owner_name,
+        a.deadline,
+        CASE
+          WHEN a.deadline IS NOT NULL
+               AND a.deadline < CURRENT_DATE
+               AND a.status IN ('confirmed', 'in_progress')
+          THEN (CURRENT_DATE - a.deadline)
+          ELSE 0
+        END AS overdue_days,
+        a.created_at
+      FROM action_items a
+      JOIN projects p ON a.project_id = p.id
+      LEFT JOIN users u ON a.assigned_to_user_id = u.id
+    `;
+
+    const sql = isAdmin
+      ? `${base} ORDER BY a.created_at DESC`
+      : `${base}
+         WHERE a.project_id IN (
+           SELECT project_id FROM project_members WHERE user_id = $1
+         )
+         ORDER BY a.created_at DESC`;
+
+    const result = await query(sql, isAdmin ? [] : [req.user.id]);
+
+    return res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error('Get all tasks error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+    });
+  }
+};
+
 export const getProjectTasks = async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;

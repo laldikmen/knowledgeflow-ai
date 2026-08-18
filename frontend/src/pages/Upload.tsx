@@ -1,7 +1,12 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '../components/Button';
 import client from '../api/client';
 import './Upload.css';
+
+interface ProjectOption {
+  value: string;
+  label: string;
+}
 
 type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
 
@@ -13,12 +18,6 @@ interface UploadFile {
   size: number;
   status: UploadStatus;
 }
-
-const PROJECT_OPTIONS = [
-  { value: 'project-alpha', label: 'Project Alpha' },
-  { value: 'project-beta', label: 'Project Beta' },
-  { value: 'onboarding-revamp', label: 'Onboarding Revamp' },
-];
 
 const inferDocumentType = (fileName: string): DocumentType => {
   const extension = fileName.split('.').pop()?.toLowerCase();
@@ -32,12 +31,34 @@ const inferDocumentType = (fileName: string): DocumentType => {
 export const Upload: React.FC = () => {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [projectId, setProjectId] = useState('project-alpha');
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+  const [projectId, setProjectId] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('transcript');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await client.get('/projects');
+        const options = response.data.map((proj: any) => ({
+          value: proj.id.toString(),
+          label: proj.name,
+        }));
+        setProjectOptions(options);
+        if (options.length > 0) {
+          setProjectId(options[0].value);
+        }
+      } catch (error) {
+        console.error('Failed to load projects', error);
+        setProjectOptions([]);
+      }
+    };
+
+    fetchProjects();
+  }, []);
 
   const handleDrag = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -270,7 +291,7 @@ export const Upload: React.FC = () => {
                 value={projectId}
                 onChange={(event) => setProjectId(event.target.value)}
               >
-                {PROJECT_OPTIONS.map((project) => (
+                {projectOptions.map((project) => (
                   <option key={project.value} value={project.value}>
                     {project.label}
                   </option>

@@ -165,60 +165,63 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const [actionNote, setActionNote] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
 
+  const loadTask = async () => {
+    setIsLoading(true);
+    try {
+      const response = await client.get(`/tasks/${numericTaskId}`);
+      const data = response.data;
+
+      const extractInitials = (name: string): string => {
+        const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length > 1) {
+          return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+        }
+        return parts[0]?.slice(0, 2).toUpperCase() || 'U';
+      };
+
+      // Backend stores in_progress with an underscore; the UI uses a hyphen.
+      const normalizedStatus = (data.status || 'draft').replace('_', '-');
+
+      const taskData: TaskDetailData = {
+        id: data.id,
+        title: data.title || data.task_title,
+        description: data.description,
+        projectName: data.project_name,
+        ownerName: data.owner_name,
+        ownerInitials: extractInitials(data.owner_name),
+        deadline: data.deadline,
+        risk: data.risk_level || 'low',
+        status: normalizedStatus,
+        overdueDays: data.overdue_days,
+        sourceDocumentId: data.source_document_id,
+        sourceDocument: data.source_document_title || 'Source Document',
+        sourceReference: data.source_reference || 'Extracted from source',
+        sourceConfidence: data.confidence_score,
+        notes: data.notes?.map((note: any) => ({
+          id: note.id,
+          author: note.author,
+          initials: extractInitials(note.author),
+          text: note.text,
+          date: new Date(note.created_at).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+        })) || [],
+        history: buildHistory(normalizedStatus, data.owner_name),
+      };
+
+      setTask(taskData);
+    } catch (error) {
+      console.error('Failed to load task', error);
+      setTask(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchTask = async () => {
-      setIsLoading(true);
-      try {
-        const response = await client.get(`/tasks/${numericTaskId}`);
-        const data = response.data;
-
-        const extractInitials = (name: string): string => {
-          const parts = name.trim().split(/\s+/).filter(Boolean);
-          if (parts.length > 1) {
-            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-          }
-          return parts[0]?.slice(0, 2).toUpperCase() || 'U';
-        };
-
-        const taskData: TaskDetailData = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          projectName: data.project_name,
-          ownerName: data.owner_name,
-          ownerInitials: extractInitials(data.owner_name),
-          deadline: data.deadline,
-          risk: data.risk_level || 'low',
-          status: data.status,
-          overdueDays: data.overdue_days,
-          sourceDocumentId: data.source_document_id,
-          sourceDocument: data.source_document_title || 'Source Document',
-          sourceReference: data.source_reference || 'Extracted from source',
-          sourceConfidence: data.confidence_score,
-          notes: data.notes?.map((note: any) => ({
-            id: note.id,
-            author: note.author,
-            initials: extractInitials(note.author),
-            text: note.text,
-            date: new Date(note.created_at).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            }),
-          })) || [],
-          history: buildHistory(data.status, data.owner_name),
-        };
-
-        setTask(taskData);
-      } catch (error) {
-        console.error('Failed to load task', error);
-        setTask(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     if (numericTaskId) {
-      fetchTask();
+      loadTask();
     }
     setNoteText('');
     setPendingAction(null);
@@ -297,91 +300,40 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     setNoteText('');
   };
 
-  const confirmPendingAction = () => {
-    if (!pendingAction) return;
+  const confirmPendingAction = async () => {
+    if (!pendingAction || !task) return;
 
-    const statusByAction: Record<PendingTaskAction, TaskStatus> = {
-      confirm: 'confirmed',
-      reject: 'rejected',
-      start: 'in-progress',
-      complete: 'completed',
-      cancel: 'cancelled',
-    };
+    const trimmedNote = actionNote.trim();
 
-    setTask((current) => {
-      if (!current) return current;
+    try {
+      if (pendingAction === 'confirm' || pendingAction === 'reject') {
+        // Human review of an AI-drafted task (admin/manager only).
+        await client.post(`/ai/action-item/${task.id}/review`, {
+          review_status: pendingAction === 'confirm' ? 'confirmed' : 'rejected',
+          review_note: trimmedNote || undefined,
+        });
+      } else {
+        // Lifecycle transition. Backend uses in_progress with an underscore and
+        // records the change in task_status_history.
+        const statusByAction: Record<'start' | 'complete' | 'cancel', string> = {
+          start: 'in_progress',
+          complete: 'completed',
+          cancel: 'cancelled',
+        };
 
-      const trimmedNote = actionNote.trim();
-      const nextStatus = statusByAction[pendingAction];
-      const nextHistoryId =
-        current.history.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-      const nextNoteId =
-        current.notes.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+        await client.put(`/tasks/${task.id}`, {
+          status: statusByAction[pendingAction],
+          completion_note: pendingAction === 'complete' ? trimmedNote || undefined : undefined,
+          cancel_reason: pendingAction === 'cancel' ? trimmedNote || undefined : undefined,
+        });
+      }
 
-      const historyContent: Record<PendingTaskAction, { title: string; detail: string }> = {
-        confirm: {
-          title: `Confirmed by ${currentUserName}`,
-          detail: `Assigned to ${current.ownerName}`,
-        },
-        reject: {
-          title: `Rejected by ${currentUserName}`,
-          detail: trimmedNote || 'AI extraction rejected',
-        },
-        start: {
-          title: `Started by ${currentUserName}`,
-          detail: trimmedNote || 'Work moved to In Progress',
-        },
-        complete: {
-          title: `Completed by ${currentUserName}`,
-          detail: trimmedNote || 'Task marked complete',
-        },
-        cancel: {
-          title: `Cancelled by ${currentUserName}`,
-          detail: trimmedNote || 'Task was no longer required',
-        },
-      };
-
-      const shouldAddNote =
-        Boolean(trimmedNote) && ['start', 'complete'].includes(pendingAction);
-
-      return {
-        ...current,
-        status: nextStatus,
-        overdueDays: ['completed', 'cancelled', 'rejected'].includes(nextStatus)
-          ? undefined
-          : current.overdueDays,
-        notes: shouldAddNote
-          ? [
-              ...current.notes,
-              {
-                id: nextNoteId,
-                author: currentUserName,
-                initials:
-                  currentUserName
-                    .split(/\s+/)
-                    .map((part) => part[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase() || 'U',
-                text: trimmedNote,
-                date: 'Today',
-              },
-            ]
-          : current.notes,
-        history: [
-          ...current.history,
-          {
-            id: nextHistoryId,
-            status: nextStatus,
-            title: historyContent[pendingAction].title,
-            detail: historyContent[pendingAction].detail,
-            date: 'Today',
-          },
-        ],
-      };
-    });
-
-    closeActionModal();
+      await loadTask();
+    } catch (error) {
+      console.error('Failed to update task', error);
+    } finally {
+      closeActionModal();
+    }
   };
 
   const taskEditValues: TaskEditValues = {

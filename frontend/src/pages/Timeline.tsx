@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import client from '../api/client';
 import './Timeline.css';
 
 type TimelineEventType = 'document' | 'decision' | 'task';
@@ -20,124 +21,6 @@ interface TimelineEvent {
   icon: 'document' | 'check' | 'task' | 'play';
 }
 
-const projects: ProjectOption[] = [
-  { id: 'alpha', name: 'Project Alpha' },
-  { id: 'beta', name: 'Project Beta' },
-  { id: 'migration', name: 'Data Migration' },
-];
-
-const events: TimelineEvent[] = [
-  {
-    id: 1,
-    projectId: 'alpha',
-    date: 'Jul 7, 2026',
-    time: '09:41',
-    title: 'Meeting transcript uploaded',
-    description: 'Inci uploaded “Project Alpha Weekly Meeting” · AI processed in 48s',
-    type: 'document',
-    icon: 'document',
-  },
-  {
-    id: 2,
-    projectId: 'alpha',
-    date: 'Jul 7, 2026',
-    time: '10:03',
-    title: 'Decision confirmed',
-    description: 'Alex confirmed “Use Amazon S3 for document storage”',
-    type: 'decision',
-    icon: 'check',
-  },
-  {
-    id: 3,
-    projectId: 'alpha',
-    date: 'Jul 7, 2026',
-    time: '10:05',
-    title: '2 tasks created & confirmed',
-    description: '“Create upload API” (Inci, Jul 20) · “Prepare frontend wireframe” (Inci, Jul 8)',
-    type: 'task',
-    icon: 'task',
-  },
-  {
-    id: 4,
-    projectId: 'alpha',
-    date: 'Jul 9, 2026',
-    time: '14:22',
-    title: 'Task started',
-    description: 'Inci moved “Prepare frontend wireframe” to In Progress',
-    type: 'task',
-    icon: 'play',
-  },
-  {
-    id: 5,
-    projectId: 'alpha',
-    date: 'Jul 9, 2026',
-    time: '16:48',
-    title: 'Task completed',
-    description: 'Inci completed “Define API schema”',
-    type: 'task',
-    icon: 'check',
-  },
-  {
-    id: 6,
-    projectId: 'beta',
-    date: 'Jul 10, 2026',
-    time: '09:18',
-    title: 'Requirements document uploaded',
-    description: 'Mona uploaded “Project Beta Requirements v1” · AI processed in 36s',
-    type: 'document',
-    icon: 'document',
-  },
-  {
-    id: 7,
-    projectId: 'beta',
-    date: 'Jul 10, 2026',
-    time: '11:26',
-    title: 'Architecture decision confirmed',
-    description: 'The team confirmed PostgreSQL as the project database',
-    type: 'decision',
-    icon: 'check',
-  },
-  {
-    id: 8,
-    projectId: 'beta',
-    date: 'Jul 11, 2026',
-    time: '15:04',
-    title: 'Task created',
-    description: '“Prepare database schema” assigned to Jordan Lee',
-    type: 'task',
-    icon: 'task',
-  },
-  {
-    id: 9,
-    projectId: 'migration',
-    date: 'Jul 12, 2026',
-    time: '08:52',
-    title: 'Migration plan uploaded',
-    description: 'Alex uploaded “Data Migration Plan” · AI processed in 41s',
-    type: 'document',
-    icon: 'document',
-  },
-  {
-    id: 10,
-    projectId: 'migration',
-    date: 'Jul 12, 2026',
-    time: '10:17',
-    title: 'Migration window confirmed',
-    description: 'The production migration window was approved for Jul 25',
-    type: 'decision',
-    icon: 'check',
-  },
-  {
-    id: 11,
-    projectId: 'migration',
-    date: 'Jul 13, 2026',
-    time: '13:35',
-    title: 'Validation task started',
-    description: 'The data validation checklist moved to In Progress',
-    type: 'task',
-    icon: 'play',
-  },
-];
 
 const filterOptions: Array<{ id: TimelineFilter; label: string }> = [
   { id: 'all', label: 'All events' },
@@ -180,12 +63,96 @@ const EventIcon: React.FC<{ icon: TimelineEvent['icon'] }> = ({ icon }) => {
   );
 };
 
+const iconForEvent = (
+  type: TimelineEventType,
+  taskStatus?: string | null,
+): TimelineEvent['icon'] => {
+  if (type === 'document') return 'document';
+  if (type === 'decision') return 'check';
+  const status = taskStatus || '';
+  if (status.includes('progress')) return 'play';
+  if (status === 'completed' || status === 'confirmed') return 'check';
+  return 'task';
+};
+
 export const Timeline: React.FC = () => {
-  const [selectedProjectId, setSelectedProjectId] = useState(projects[0].id);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [selectedType, setSelectedType] = useState<TimelineFilter>('all');
 
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const projectsResponse = await client.get('/projects');
+        const projectsData = projectsResponse.data.map((proj: any) => ({
+          id: proj.id.toString(),
+          name: proj.name,
+        }));
+        setProjects(projectsData);
+        if (projectsData.length > 0) {
+          setSelectedProjectId(projectsData[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load projects', error);
+        setProjects([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  // Load the activity feed whenever the selected project changes.
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setEvents([]);
+      return;
+    }
+
+    const fetchTimeline = async () => {
+      try {
+        const response = await client.get(`/timeline/${selectedProjectId}`);
+        const mapped: TimelineEvent[] = response.data.map(
+          (row: any, index: number) => {
+            const when = row.ts ? new Date(row.ts) : null;
+            return {
+              id: index,
+              projectId: selectedProjectId,
+              date: when
+                ? when.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : '',
+              time: when
+                ? when.toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : '',
+              title: row.title,
+              description: row.description,
+              type: row.type as TimelineEventType,
+              icon: iconForEvent(row.type, row.task_status),
+            };
+          },
+        );
+        setEvents(mapped);
+      } catch (error) {
+        console.error('Failed to load timeline', error);
+        setEvents([]);
+      }
+    };
+
+    fetchTimeline();
+  }, [selectedProjectId]);
+
   const selectedProject =
-    projects.find(project => project.id === selectedProjectId) ?? projects[0];
+    projects.find(project => project.id === selectedProjectId) ?? null;
 
   const filteredEvents = useMemo(
     () =>
@@ -194,7 +161,7 @@ export const Timeline: React.FC = () => {
           event.projectId === selectedProjectId &&
           (selectedType === 'all' || event.type === selectedType),
       ),
-    [selectedProjectId, selectedType],
+    [events, selectedProjectId, selectedType],
   );
 
   const groupedEvents = useMemo(() => {
@@ -219,11 +186,20 @@ export const Timeline: React.FC = () => {
     setSelectedType('all');
   };
 
+  // Early returns must come AFTER all hooks (Rules of Hooks).
+  if (isLoading) {
+    return <section className="timeline-page">Loading...</section>;
+  }
+
+  if (projects.length === 0) {
+    return <section className="timeline-page">No projects available.</section>;
+  }
+
   return (
     <section className="timeline-page" aria-labelledby="timeline-title">
       <header className="timeline-page-header">
         <div className="timeline-heading">
-          <h1 id="timeline-title">{selectedProject.name} · Timeline</h1>
+          <h1 id="timeline-title">{selectedProject?.name} · Timeline</h1>
           <p>Every document, decision &amp; task event in order</p>
         </div>
 

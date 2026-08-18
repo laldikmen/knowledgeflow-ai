@@ -53,12 +53,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         password,
       });
 
+      const { token, user } = response.data;
+
       const authData: AuthUser = {
-        token: response.data.token,
-        email: response.data.email,
-        name: response.data.name,
-        role: response.data.system_role,
-        initials: extractInitials(response.data.name),
+        token,
+        email: user.email,
+        name: user.name,
+        role: user.system_role,
+        initials: extractInitials(user.name),
       };
 
       onLogin(authData);

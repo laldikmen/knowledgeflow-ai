@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   createTask,
+  getAllTasks,
   getProjectTasks,
   getTaskDetail,
   updateTask,
@@ -13,6 +14,9 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(verifyToken);
+
+// List all accessible tasks
+router.get('/', getAllTasks);
 
 // Create task (admin or manager only)
 router.post('/', createTask);

@@ -24,11 +24,10 @@ interface ChatSession {
   messages: ChatMessage[];
 }
 
-const projects = [
-  { id: 'alpha', name: 'Project Alpha' },
-  { id: 'beta', name: 'Project Beta' },
-  { id: 'migration', name: 'Data Migration' },
-];
+interface ChatProject {
+  id: string;
+  name: string;
+}
 
 const initialSessions: ChatSession[] = [];
 
@@ -53,15 +52,37 @@ const createSessionTitle = (question: string) =>
 
 export const AIChat: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
+  const [projects, setProjects] = useState<ChatProject[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number>(1);
-  const [selectedProject, setSelectedProject] = useState('alpha');
+  const [selectedProject, setSelectedProject] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await client.get('/projects');
+        const projectsData = response.data.map((proj: any) => ({
+          id: proj.id.toString(),
+          name: proj.name,
+        }));
+        setProjects(projectsData);
+        if (projectsData.length > 0) {
+          setSelectedProject(projectsData[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load projects', error);
+        setProjects([]);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
   const selectedProjectName = useMemo(
-    () => projects.find(project => project.id === selectedProject)?.name ?? 'Project Alpha',
-    [selectedProject],
+    () => projects.find(project => project.id === selectedProject)?.name ?? '',
+    [projects, selectedProject],
   );
 
   const projectSessions = useMemo(
@@ -97,20 +118,19 @@ export const AIChat: React.FC = () => {
     projectId: string,
   ): Promise<Omit<ChatMessage, 'id' | 'type'>> => {
     try {
-      const response = await client.post('/chat', {
+      const response = await client.post(`/ai/chat/${projectId}`, {
         question,
-        project_id: projectId,
       });
 
-      const data = response.data;
+      const data = response.data.data ?? response.data;
+      const firstSource = Array.isArray(data.sources) ? data.sources[0] : undefined;
       return {
         content: data.answer || data.content,
-        emphasis: data.emphasis,
-        source: data.source ? {
-          title: data.source.title,
-          meta: data.source.meta,
+        source: firstSource ? {
+          title: firstSource.title,
+          meta: firstSource.meta,
         } : undefined,
-        unavailable: data.unavailable || false,
+        unavailable: false,
       };
     } catch (error) {
       console.error('Failed to get AI response:', error);

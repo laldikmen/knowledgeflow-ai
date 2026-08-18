@@ -100,7 +100,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     if (currentPage === 'projects') {
       return {
         title: 'Projects',
-        subtitle: '6 projects across 4 departments',
         searchPlaceholder: 'Search projects...',
         actionLabel: 'Create Project',
         actionIcon: 'plus',

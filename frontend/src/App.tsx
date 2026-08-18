@@ -125,7 +125,7 @@ function App() {
         userName={authUser.name}
         userRole={authUser.role}
         userInitials={authUser.initials}
-        itemsNeedingReview={{ count: 3, projects: 2 }}
+        itemsNeedingReview={{ count: 0, projects: 0 }}
         onLogout={handleLogout}
       >
         <Routes>

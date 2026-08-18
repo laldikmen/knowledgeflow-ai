@@ -6,10 +6,10 @@ import { ConfirmationModal } from '../components/ConfirmationModal';
 
 type TaskStatus = 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
 type TaskRisk = 'low' | 'medium' | 'high';
-type ProjectFilter = 'all' | 'alpha' | 'beta';
+type ProjectFilter = string;
 
 interface ProjectOption {
-  id: Exclude<ProjectFilter, 'all'>;
+  id: string;
   shortName: string;
   fullName: string;
   totalTasks: number;
@@ -18,7 +18,7 @@ interface ProjectOption {
 interface Task {
   id: number;
   title: string;
-  projectId: Exclude<ProjectFilter, 'all'>;
+  projectId: string;
   projectName: string;
   ownerInitials: string;
   ownerName: string;
@@ -37,162 +37,6 @@ interface BoardColumn {
 interface ActionTrackerProps {
   currentUserName?: string;
 }
-
-const PROJECTS: ProjectOption[] = [
-  {
-    id: 'alpha',
-    shortName: 'Alpha',
-    fullName: 'Project Alpha',
-    totalTasks: 42,
-  },
-  {
-    id: 'beta',
-    shortName: 'Beta',
-    fullName: 'Project Beta',
-    totalTasks: 18,
-  },
-];
-
-const TASKS: Task[] = [
-  {
-    id: 1,
-    title: 'Prepare frontend wireframe',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'I',
-    ownerName: 'Inci',
-    status: 'draft',
-    risk: 'high',
-  },
-  {
-    id: 2,
-    title: 'Draft API rate-limit policy',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'JL',
-    ownerName: 'Jordan Lee',
-    status: 'draft',
-    risk: 'low',
-  },
-  {
-    id: 3,
-    title: 'Create upload API',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'I',
-    ownerName: 'Inci',
-    dueDate: 'Jul 20',
-    status: 'confirmed',
-    risk: 'medium',
-  },
-  {
-    id: 4,
-    title: 'Set up S3 buckets',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'JL',
-    ownerName: 'Jordan Lee',
-    dueDate: 'Jul 22',
-    status: 'confirmed',
-    risk: 'low',
-  },
-  {
-    id: 5,
-    title: 'Prepare frontend wireframe',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'I',
-    ownerName: 'Inci',
-    dueDate: 'Jul 8',
-    status: 'in-progress',
-    risk: 'high',
-    overdue: true,
-  },
-  {
-    id: 6,
-    title: 'Write API integration tests',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'JL',
-    ownerName: 'Jordan Lee',
-    dueDate: 'Jul 24',
-    status: 'in-progress',
-    risk: 'medium',
-  },
-  {
-    id: 7,
-    title: 'Define API schema',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'I',
-    ownerName: 'Inci',
-    status: 'completed',
-    risk: 'medium',
-  },
-  {
-    id: 8,
-    title: 'Storage vendor review',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'AM',
-    ownerName: 'Alex Morgan',
-    status: 'completed',
-    risk: 'low',
-  },
-  {
-    id: 9,
-    title: 'Evaluate Azure Blob',
-    projectId: 'alpha',
-    projectName: 'Project Alpha',
-    ownerInitials: 'JL',
-    ownerName: 'Jordan Lee',
-    status: 'cancelled',
-    risk: 'low',
-  },
-  {
-    id: 10,
-    title: 'Review vendor SLA',
-    projectId: 'beta',
-    projectName: 'Project Beta',
-    ownerInitials: 'AM',
-    ownerName: 'Alex Morgan',
-    status: 'draft',
-    risk: 'high',
-  },
-  {
-    id: 11,
-    title: 'Define data-retention rules',
-    projectId: 'beta',
-    projectName: 'Project Beta',
-    ownerInitials: 'I',
-    ownerName: 'Inci',
-    dueDate: 'Jul 25',
-    status: 'confirmed',
-    risk: 'medium',
-  },
-  {
-    id: 12,
-    title: 'Migrate audit logs',
-    projectId: 'beta',
-    projectName: 'Project Beta',
-    ownerInitials: 'AM',
-    ownerName: 'Alex Morgan',
-    dueDate: 'Jul 10',
-    status: 'in-progress',
-    risk: 'high',
-    overdue: true,
-  },
-  {
-    id: 13,
-    title: 'Approve CRM access matrix',
-    projectId: 'beta',
-    projectName: 'Project Beta',
-    ownerInitials: 'JL',
-    ownerName: 'Jordan Lee',
-    status: 'completed',
-    risk: 'low',
-  },
-];
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
   draft: 'Draft',
@@ -215,9 +59,10 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
 }) => {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
-  const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('alpha');
+  const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('all');
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -227,37 +72,61 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
   } | null>(null);
   const [actionReason, setActionReason] = useState('');
 
+  const loadTasks = async () => {
+    try {
+      const response = await client.get('/tasks');
+      const tasksData = response.data.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        projectId: (task.project_id ?? '').toString(),
+        projectName: task.project_name,
+        ownerInitials: (task.owner_name || '')
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((part: string) => part[0])
+          .join('')
+          .toUpperCase()
+          .slice(0, 2),
+        ownerName: task.owner_name,
+        dueDate: task.deadline
+          ? new Date(task.deadline).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            })
+          : undefined,
+        status: task.status || 'draft',
+        risk: task.risk_level || 'medium',
+        overdue: Number(task.overdue_days) > 0,
+      }));
+      setTasks(tasksData);
+    } catch (error) {
+      console.error('Failed to load tasks', error);
+      setTasks([]);
+    }
+  };
+
   useEffect(() => {
-    const fetchTasks = async () => {
+    const fetchData = async () => {
+      await loadTasks();
+
       try {
-        const response = await client.get('/tasks');
-        const tasksData = response.data.map((task: any) => ({
-          id: task.id,
-          title: task.title,
-          projectId: task.project_id || 'alpha',
-          projectName: task.project_name,
-          ownerInitials: task.owner_name
-            .split(/\s+/)
-            .map((part: string) => part[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2),
-          ownerName: task.owner_name,
-          dueDate: task.deadline,
-          status: task.status || 'draft',
-          risk: task.risk_level || 'medium',
-          overdue: task.overdue_days && task.overdue_days > 0,
+        const projectsResponse = await client.get('/projects');
+        const projectsData = projectsResponse.data.map((proj: any) => ({
+          id: proj.id.toString(),
+          shortName: proj.name,
+          fullName: proj.name,
+          totalTasks: 0,
         }));
-        setTasks(tasksData);
+        setProjects(projectsData);
       } catch (error) {
-        console.error('Failed to load tasks', error);
-        setTasks(TASKS);
+        console.error('Failed to load projects', error);
+        setProjects([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchTasks();
+    fetchData();
   }, []);
 
   const visibleTasks = useMemo(() => {
@@ -280,16 +149,12 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
     }));
   }, [visibleTasks]);
 
-  const selectedProject = PROJECTS.find((project) => project.id === selectedProjectId);
-  const allProjectTaskCount = PROJECTS.reduce(
-    (total, project) => total + project.totalTasks,
-    0,
-  );
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
 
   const pageSubtitle =
     selectedProjectId === 'all'
-      ? `${allProjectTaskCount} tasks across ${PROJECTS.length} projects`
-      : `${selectedProject?.fullName ?? 'Project'} · ${selectedProject?.totalTasks ?? 0} tasks`;
+      ? `${tasks.length} tasks across ${projects.length} projects`
+      : `${selectedProject?.fullName ?? 'Project'} · ${visibleTasks.length} tasks`;
 
   const renderRisk = (risk?: TaskRisk) => {
     if (!risk) return null;
@@ -388,22 +253,22 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
     setActionReason('');
   };
 
-  const confirmPendingAction = () => {
+  const confirmPendingAction = async () => {
     if (!pendingAction || !pendingTask) return;
 
-    if (pendingAction.type === 'confirm') {
-      setTasks((current) =>
-        current.map((task) =>
-          task.id === pendingTask.id ? { ...task, status: 'confirmed' } : task,
-        ),
-      );
-    } else {
-      setTasks((current) =>
-        current.filter((task) => task.id !== pendingTask.id),
-      );
+    try {
+      // Human review of an AI-drafted task: confirm turns it into a tracked task,
+      // reject discards it. Backend records the reviewer and note.
+      await client.post(`/ai/action-item/${pendingTask.id}/review`, {
+        review_status: pendingAction.type === 'confirm' ? 'confirmed' : 'rejected',
+        review_note: actionReason.trim() || undefined,
+      });
+      await loadTasks();
+    } catch (error) {
+      console.error('Failed to review task', error);
+    } finally {
+      closeConfirmation();
     }
-
-    closeConfirmation();
   };
 
   if (isLoading) {
@@ -447,7 +312,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
             aria-label="Filter tasks by project"
           >
             <option value="all">Project: All</option>
-            {PROJECTS.map((project) => (
+            {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 Project: {project.shortName}
               </option>

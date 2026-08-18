@@ -1,6 +1,6 @@
 import { Pool, QueryResult } from 'pg';
 import dotenv from 'dotenv';
-import AWS from 'aws-sdk';
+import * as AWS from 'aws-sdk';
 
 dotenv.config();
 
@@ -19,6 +19,7 @@ async function initializePool() {
   // Try to read from AWS Secrets Manager if in production
   if (process.env.NODE_ENV === 'production' && process.env.AWS_LAMBDA_FUNCTION_NAME) {
     try {
+      // @ts-ignore
       const secretsManager = new AWS.SecretsManager({ region: process.env.S3_REGION || 'eu-central-1' });
       const secret = await secretsManager.getSecretValue({ SecretId: 'knowledgeflow/prod/db' }).promise();
 

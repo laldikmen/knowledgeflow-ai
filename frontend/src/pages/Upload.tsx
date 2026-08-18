@@ -145,11 +145,23 @@ export const Upload: React.FC = () => {
           formData.append('description', description);
         }
 
-        await client.post('/documents/upload', formData, {
+        const uploadResponse = await client.post('/documents/upload', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         });
+
+        // Trigger AI processing (summary, decisions, action items) on the new
+        // document. Upload has already succeeded, so a processing failure
+        // (e.g. no extractable text) must not fail the upload.
+        const documentId = uploadResponse.data?.id;
+        if (documentId) {
+          try {
+            await client.post(`/ai/process/${documentId}`);
+          } catch (processError) {
+            console.error('AI processing failed (document still uploaded):', processError);
+          }
+        }
       }
 
       setFiles((currentFiles) =>

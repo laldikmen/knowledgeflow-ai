@@ -244,12 +244,14 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
     const result = await query(
       `SELECT
         d.id, d.project_id, d.title, d.description, d.file_name, d.file_type, d.document_type,
-        d.status,
+        d.status, d.s3_url,
+        p.name AS project_name,
         u.name as uploaded_by_name, u.email as uploaded_by_email,
         d.uploaded_at,
         pm.project_role
       FROM documents d
       LEFT JOIN users u ON d.uploaded_by = u.id
+      LEFT JOIN projects p ON d.project_id = p.id
       LEFT JOIN project_members pm ON d.project_id = pm.project_id AND pm.user_id = $1
       WHERE d.id = $2`,
       [req.user.id, documentId]

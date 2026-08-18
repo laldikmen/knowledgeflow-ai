@@ -111,14 +111,15 @@ Return ONLY a single JSON object (no markdown, no commentary) with this exact sh
 {
   "summary": "a concise 2-3 paragraph summary",
   "summary_confidence": 0.0,
-  "decisions": [ { "text": "the decision", "confidence": 0.0 } ],
-  "action_items": [ { "title": "the task", "suggested_owner": "person name or null", "deadline": "YYYY-MM-DD or null", "risk": "low|medium|high", "confidence": 0.0 } ]
+  "decisions": [ { "text": "the decision", "source": "the exact sentence from the document this came from", "confidence": 0.0 } ],
+  "action_items": [ { "title": "the task", "suggested_owner": "person name or null", "deadline": "YYYY-MM-DD or null", "risk": "low|medium|high", "source": "the exact sentence from the document this came from", "confidence": 0.0 } ]
 }
 
 Classify every extracted item into EXACTLY ONE list:
 - A DECISION is a conclusion or choice that was settled — what the group decided. It is not something still to be done and has no owner or deadline. Example: "Standardize on Amazon S3 for document storage."
 - An ACTION ITEM is work someone must do — it has an action verb and usually an owner and/or a deadline. Example: "Set up the migration task force by Aug 31."
 - If an item reads as both, put it in action_items when it describes work to be done; otherwise decisions. NEVER put the same item in both lists.
+- "source" must be the verbatim sentence (or short quote) from the document that the item was extracted from, so a reviewer can trace it back.
 - "confidence" is your own 0.0-1.0 estimate of how clearly the item is stated in the document.
 - "risk" is your estimate of how risky/urgent the action item is.
 
@@ -165,25 +166,33 @@ ${documentText}`;
       const text = typeof d === 'string' ? d : d?.text;
       if (text && String(text).trim()) {
         await query(
-          `INSERT INTO decisions (document_id, decision_text, review_status, ai_confidence, created_by_ai)
-           VALUES ($1, $2, $3, $4, true)`,
-          [documentId, String(text).trim(), 'draft', clampConfidence(d?.confidence, 0.7)]
+          `INSERT INTO decisions (document_id, decision_text, source_excerpt, review_status, ai_confidence, created_by_ai)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [documentId, String(text).trim(), d?.source || null, 'draft', clampConfidence(d?.confidence, 0.7)]
         );
       }
     }
+
+    // Replace previously AI-drafted action items (keep any already reviewed).
+    await query(
+      `DELETE FROM action_items
+       WHERE document_id = $1 AND created_by_ai = true AND status = 'draft'`,
+      [documentId]
+    );
 
     // Store action items
     for (const item of actionItems) {
       if (item?.title && String(item.title).trim()) {
         await query(
           `INSERT INTO action_items (
-            document_id, project_id, task_title, suggested_owner_text,
+            document_id, project_id, task_title, source_excerpt, suggested_owner_text,
             deadline, status, risk_level, created_by_ai, ai_confidence
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)`,
           [
             documentId,
             document.project_id,
             String(item.title).trim(),
+            item.source || null,
             item.suggested_owner || item.suggested_owner_text || null,
             cleanDeadline(item.deadline),
             'draft',

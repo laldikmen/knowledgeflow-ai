@@ -221,7 +221,35 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
             day: 'numeric',
           }),
         })) || [],
-        history: buildHistory(normalizedStatus, data.owner_name),
+        // Real status history recorded by the backend (task_status_history).
+        history: Array.isArray(data.status_history) && data.status_history.length > 0
+          ? data.status_history.map((row: any) => {
+              const status = (row.new_status || 'draft').replace('_', '-') as TaskStatus;
+              const who = row.changed_by_name || 'Someone';
+              const titleByStatus: Record<string, string> = {
+                confirmed: `Confirmed by ${who}`,
+                'in-progress': `Started by ${who}`,
+                completed: `Completed by ${who}`,
+                cancelled: `Cancelled by ${who}`,
+                rejected: `Rejected by ${who}`,
+                draft: 'Created',
+              };
+              return {
+                id: row.id,
+                status,
+                title: titleByStatus[status] || `Moved to ${status}`,
+                detail:
+                  row.change_note ||
+                  `${(row.previous_status || 'new').replace('_', '-')} → ${status}`,
+                date: new Date(row.changed_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              };
+            })
+          : buildHistory(normalizedStatus, data.owner_name),
       };
 
       setTask(taskData);

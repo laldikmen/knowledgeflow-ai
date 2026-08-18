@@ -80,6 +80,67 @@ export const AIChat: React.FC = () => {
     fetchProjects();
   }, []);
 
+  // Load this user's persisted chat history for the selected project so past
+  // conversations survive reloads (backend returns only the caller's own).
+  useEffect(() => {
+    if (!selectedProject) return;
+
+    const loadHistory = async () => {
+      try {
+        const response = await client.get(`/ai/chat/${selectedProject}/my-history`);
+        const rows: any[] = Array.isArray(response.data) ? response.data : [];
+
+        const parseFirstSource = (raw: any): ChatSource | undefined => {
+          let arr = raw;
+          if (typeof raw === 'string') {
+            try { arr = JSON.parse(raw); } catch { return undefined; }
+          }
+          if (!Array.isArray(arr) || arr.length === 0) return undefined;
+          const s = arr[0];
+          return { title: s.title || s.document_title, meta: s.meta || s.excerpt };
+        };
+
+        const loaded: ChatSession[] = rows.map((row) => {
+          const rid = Number(row.id);
+          return {
+            id: rid,
+            projectId: selectedProject,
+            title: createSessionTitle(row.question || 'Conversation'),
+            time: row.created_at
+              ? new Date(row.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                })
+              : '',
+            messages: [
+              { id: rid * 2, type: 'user', content: row.question || '' },
+              {
+                id: rid * 2 + 1,
+                type: 'assistant',
+                content: row.answer || '',
+                source: parseFirstSource(row.sources),
+              },
+            ],
+          };
+        });
+        // Newest first.
+        loaded.sort((a, b) => b.id - a.id);
+
+        // Replace this project's sessions with the loaded history; keep any other project's.
+        setSessions((prev) => [
+          ...loaded,
+          ...prev.filter((s) => s.projectId !== selectedProject),
+        ]);
+        setActiveSessionId(loaded[0]?.id ?? 0);
+      } catch (error) {
+        console.error('Failed to load chat history', error);
+      }
+    };
+
+    loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject]);
+
   const selectedProjectName = useMemo(
     () => projects.find(project => project.id === selectedProject)?.name ?? '',
     [projects, selectedProject],
@@ -127,8 +188,8 @@ export const AIChat: React.FC = () => {
       return {
         content: data.answer || data.content,
         source: firstSource ? {
-          title: firstSource.title,
-          meta: firstSource.meta,
+          title: firstSource.document_title || firstSource.title,
+          meta: firstSource.excerpt || firstSource.meta,
         } : undefined,
         unavailable: false,
       };

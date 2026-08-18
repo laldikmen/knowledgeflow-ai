@@ -43,7 +43,7 @@ CREATE TABLE documents (
   title VARCHAR(255) NOT NULL,
   description TEXT,
   file_name VARCHAR(255) NOT NULL,
-  file_type VARCHAR(50),
+  file_type VARCHAR(150),
   document_type VARCHAR(50),
   s3_key TEXT NOT NULL,
   s3_url TEXT,

@@ -55,16 +55,17 @@ export const Dashboard: React.FC = () => {
           })),
         );
 
-        // Project risk overview from high-risk projects
+        // Project risk overview from the computed risk model (Medium/High projects).
         setRisks(
           highRisk.map((project: any) => {
-            const active = Number(project.active_tasks) || 1;
-            const high = Number(project.high_risk_count) || 0;
-            const ratio = Math.min(1, Math.max(0.15, high / active));
+            const level = (project.risk_level as string) || 'High';
+            const type = level.toLowerCase();
+            // Bar width scales with the risk score (capped), for a quick visual.
+            const ratio = Math.min(1, Math.max(0.2, (Number(project.risk_score) || 0) / 8));
             return {
               name: project.name,
-              level: 'High',
-              type: 'high',
+              level,
+              type,
               width: `${Math.round(ratio * 100)}%`,
             };
           }),
@@ -77,7 +78,7 @@ export const Dashboard: React.FC = () => {
           overdueTasks: Number(summary.overdue_count) || 0,
           upcomingDeadlines: Number(summary.tasks_due_this_week) || 0,
           draftTasks: (data.draft_tasks || []).length,
-          highRiskProjects: highRisk.length,
+          highRiskProjects: highRisk.filter((p: any) => p.risk_level === 'High').length,
         });
       } catch (error) {
         console.error('Failed to load dashboard data', error);

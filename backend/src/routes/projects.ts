@@ -4,6 +4,7 @@ import {
   getProjectDetail,
   createProject,
   addProjectMember,
+  removeProjectMember,
 } from '../handlers/projects';
 import { verifyToken, requireProjectAccess } from '../middleware/auth';
 
@@ -23,5 +24,8 @@ router.get('/:projectId', requireProjectAccess, getProjectDetail);
 
 // Add member to project
 router.post('/:projectId/members', requireProjectAccess, addProjectMember);
+
+// Remove member from project
+router.delete('/:projectId/members/:userId', requireProjectAccess, removeProjectMember);
 
 export default router;

@@ -244,12 +244,14 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
     const result = await query(
       `SELECT
         d.id, d.project_id, d.title, d.description, d.file_name, d.file_type, d.document_type,
-        d.status,
+        d.status, d.s3_url,
+        p.name AS project_name,
         u.name as uploaded_by_name, u.email as uploaded_by_email,
         d.uploaded_at,
         pm.project_role
       FROM documents d
       LEFT JOIN users u ON d.uploaded_by = u.id
+      LEFT JOIN projects p ON d.project_id = p.id
       LEFT JOIN project_members pm ON d.project_id = pm.project_id AND pm.user_id = $1
       WHERE d.id = $2`,
       [req.user.id, documentId]
@@ -311,6 +313,39 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
         source: row.source_excerpt,
         status: row.review_status,
         confidence: row.ai_confidence,
+      }));
+
+    // AI-extracted action items for this document (drafts awaiting review).
+    // Viewers only see confirmed ones, per the access rules.
+    const actionItemsResult = await query(
+      `SELECT
+        a.id, a.task_title, a.description, a.source_excerpt,
+        a.suggested_owner_text, a.deadline, a.risk_level, a.status, a.ai_confidence,
+        u.name AS assigned_to_name, p.name AS project_name
+      FROM action_items a
+      LEFT JOIN users u ON a.assigned_to_user_id = u.id
+      LEFT JOIN projects p ON a.project_id = p.id
+      WHERE a.document_id = $1
+      ORDER BY a.id ASC`,
+      [documentId]
+    );
+
+    document.action_items = actionItemsResult.rows
+      .filter((row) => !isViewer || row.status === 'confirmed')
+      .map((row) => ({
+        id: row.id,
+        title: row.task_title,
+        description: row.description,
+        source: row.source_excerpt,
+        // Display name = the assigned user, or the AI-suggested owner while unassigned.
+        owner: row.assigned_to_name || row.suggested_owner_text || '',
+        owner_suggested: !row.assigned_to_name && !!row.suggested_owner_text,
+        deadline: row.deadline,
+        deadline_suggested: !!row.deadline && row.status === 'draft',
+        priority: row.risk_level,
+        status: row.status,
+        confidence: row.ai_confidence,
+        project_name: row.project_name,
       }));
 
     return res.json({

@@ -110,6 +110,15 @@ export const getAllTasks = async (req: Request, res: Response) => {
           THEN (CURRENT_DATE - a.deadline)
           ELSE 0
         END AS overdue_days,
+        (
+          a.status IN ('confirmed', 'in_progress')
+          AND (
+            a.risk_level = 'high'
+            OR (a.deadline IS NOT NULL AND a.deadline < CURRENT_DATE)
+            OR (a.status = 'confirmed' AND a.deadline IS NOT NULL
+                AND a.deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days')
+          )
+        ) AS is_at_risk,
         a.created_at
       FROM action_items a
       JOIN projects p ON a.project_id = p.id
@@ -245,10 +254,18 @@ export const getTaskDetail = async (req: Request, res: Response) => {
         a.reviewed_by, a.reviewed_at, a.review_note,
         a.completed_by, a.completed_at, a.completion_note,
         a.cancelled_by, a.cancelled_at, a.cancel_reason,
-        u.name as assigned_to_name, u.email as assigned_to_email,
+        u.name as assigned_to_name, u.name as owner_name, u.email as assigned_to_email,
+        p.name as project_name,
+        CASE
+          WHEN a.deadline IS NOT NULL AND a.deadline < CURRENT_DATE
+               AND a.status IN ('confirmed', 'in_progress')
+          THEN (CURRENT_DATE - a.deadline)
+          ELSE 0
+        END AS overdue_days,
         a.created_at, a.updated_at
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
+      LEFT JOIN projects p ON a.project_id = p.id
       WHERE a.id = $1`,
       [taskId]
     );

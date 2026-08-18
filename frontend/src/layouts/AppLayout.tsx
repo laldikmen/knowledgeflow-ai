@@ -104,6 +104,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         actionLabel: 'Create Project',
         actionIcon: 'plus',
         showNotifications: false,
+        onAction: () => navigate('/projects?new=1'),
       };
     }
 

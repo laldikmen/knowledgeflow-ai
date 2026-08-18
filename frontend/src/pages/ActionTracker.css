@@ -530,3 +530,27 @@
   outline: 2px solid #d0a915;
   outline-offset: -2px;
 }
+
+/* At-risk task highlight (leading-indicator risk model) */
+.tracker-task-card--at-risk {
+  border-color: #e0a83a;
+  box-shadow: 0 0 0 1px rgba(224, 168, 58, 0.35);
+}
+.tracker-at-risk-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9a6b12;
+  background: #fbf0d6;
+  border-radius: 999px;
+  padding: 3px 9px;
+  margin-bottom: 8px;
+}
+.tracker-at-risk-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e0a83a;
+}

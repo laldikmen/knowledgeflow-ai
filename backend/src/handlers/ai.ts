@@ -2,41 +2,40 @@ import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
 
-// TODO: Bedrock initialization - use bedrock-runtime library instead of aws-sdk v2
-// const bedrock = new AWS.Bedrock({...});
-// const bedrockRuntime = new AWS.BedrockRuntime({...});
+// Newer Claude models on Bedrock require a cross-region inference profile and the
+// Converse API (on-demand direct invoke is not supported).
+const BEDROCK_REGION = process.env.BEDROCK_REGION || process.env.S3_REGION || 'eu-central-1';
+const BEDROCK_MODEL_ID =
+  process.env.BEDROCK_MODEL_ID || 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
 
-interface ClaudeResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-}
+const bedrockRuntime = new AWS.BedrockRuntime({ region: BEDROCK_REGION });
 
-async function callBedrock(prompt: string): Promise<string> {
+// Send a prompt to Bedrock (Converse API) and return the model's text reply.
+export async function callBedrock(
+  prompt: string,
+  maxTokens = 2048,
+): Promise<string> {
   try {
-    // Mock responses for MVP testing - replace with real Bedrock call when configured
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[MOCK AI] Processing with mock responses');
+    const response = await bedrockRuntime
+      .converse({
+        modelId: BEDROCK_MODEL_ID,
+        messages: [{ role: 'user', content: [{ text: prompt }] }],
+        inferenceConfig: { maxTokens, temperature: 0 },
+      })
+      .promise();
 
-      if (prompt.includes('summary')) {
-        return 'This document outlines strategic initiatives for Q3-Q4. Key focuses include cloud infrastructure migration, marketing budget expansion, and API modernization. The team identified critical dependencies and risks around resource allocation and timeline management.';
-      } else if (prompt.includes('Extract all key decisions')) {
-        return '["Migrate databases to cloud infrastructure by October 31st", "Increase marketing budget by 20%", "Deprecate legacy API by December 31st 2026", "Establish migration task force by end of August"]';
-      } else if (prompt.includes('Extract all action items')) {
-        return '[{"title":"Set up migration task force","suggested_owner_text":"John Smith","deadline":"2026-08-31"},{"title":"Allocate 20% additional marketing budget","suggested_owner_text":"Sarah Johnson","deadline":"2026-09-15"},{"title":"Communicate API deprecation to stakeholders","suggested_owner_text":"Engineering Lead","deadline":"2026-09-01"}]';
-      }
-      return '';
-    }
-
-    // TODO: Real Bedrock API call - implement when bedrock-runtime library is installed
-    // const params = { ... };
-    // const response = await bedrockRuntime.invokeModel(params).promise();
-    throw new Error('Bedrock API not configured. Set NODE_ENV=development for mock responses.');
+    const parts = response.output?.message?.content || [];
+    return parts.map((p: any) => p.text || '').join('').trim();
   } catch (error) {
     console.error('Bedrock API error:', error);
     throw new Error('Failed to call Bedrock API');
   }
+}
+
+// Claude often wraps JSON in ```json fences; strip them before parsing.
+export function extractJson(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced ? fenced[1] : text).trim();
 }
 
 export const processDocument = async (req: Request, res: Response) => {
@@ -103,87 +102,102 @@ export const processDocument = async (req: Request, res: Response) => {
 
     const documentText = textResult.rows[0].extracted_text;
 
-    // Call Bedrock to generate summary
-    const summaryPrompt = `Analyze the following document and provide a concise summary (2-3 paragraphs).
+    // One classified extraction call. The model separates DECISIONS (choices that
+    // were settled) from ACTION ITEMS (work to be done) — an item goes in exactly
+    // one list — and self-reports a 0-1 confidence per item.
+    const extractionPrompt = `You extract structured knowledge from a business document.
+
+Return ONLY a single JSON object (no markdown, no commentary) with this exact shape:
+{
+  "summary": "a concise 2-3 paragraph summary",
+  "summary_confidence": 0.0,
+  "decisions": [ { "text": "the decision", "source": "the exact sentence from the document this came from", "confidence": 0.0 } ],
+  "action_items": [ { "title": "the task", "suggested_owner": "person name or null", "deadline": "YYYY-MM-DD or null", "risk": "low|medium|high", "source": "the exact sentence from the document this came from", "confidence": 0.0 } ]
+}
+
+Classify every extracted item into EXACTLY ONE list:
+- A DECISION is a conclusion or choice that was settled — what the group decided. It is not something still to be done and has no owner or deadline. Example: "Standardize on Amazon S3 for document storage."
+- An ACTION ITEM is work someone must do — it has an action verb and usually an owner and/or a deadline. Example: "Set up the migration task force by Aug 31."
+- If an item reads as both, put it in action_items when it describes work to be done; otherwise decisions. NEVER put the same item in both lists.
+- "source" must be the verbatim sentence (or short quote) from the document that the item was extracted from, so a reviewer can trace it back.
+- "confidence" is your own 0.0-1.0 estimate of how clearly the item is stated in the document.
+- "risk" is your estimate of how risky/urgent the action item is.
 
 Document:
-${documentText}
+${documentText}`;
 
-Provide only the summary, nothing else.`;
+    const raw = await callBedrock(extractionPrompt, 4096);
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(extractJson(raw));
+    } catch {
+      parsed = {};
+    }
 
-    const summary = await callBedrock(summaryPrompt);
+    const clampConfidence = (value: any, fallback: number): number => {
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+    };
+    const cleanDeadline = (value?: string | null): string | null => {
+      if (!value) return null;
+      const match = String(value).match(/\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : null;
+    };
+    const cleanRisk = (value?: string): string =>
+      ['low', 'medium', 'high'].includes(String(value)) ? String(value) : 'medium';
+
+    const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+    const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
+    const actionItems = Array.isArray(parsed.action_items) ? parsed.action_items : [];
 
     // Store summary (delete old one first if exists)
     await query('DELETE FROM ai_summaries WHERE document_id = $1', [documentId]);
-    await query(
-      `INSERT INTO ai_summaries (document_id, summary_text, review_status, ai_confidence)
-       VALUES ($1, $2, $3, $4)`,
-      [documentId, summary, 'draft', 0.85]
-    );
-
-    // Call Bedrock to extract decisions
-    const decisionsPrompt = `Extract all key decisions made in this document. Format as a JSON array of strings.
-
-Document:
-${documentText}
-
-Return ONLY valid JSON array with no markdown formatting or explanation. Example: ["Decision 1", "Decision 2"]`;
-
-    const decisionsText = await callBedrock(decisionsPrompt);
-    let decisions: string[] = [];
-    try {
-      decisions = JSON.parse(decisionsText);
-    } catch {
-      decisions = [decisionsText];
+    if (summary.trim()) {
+      await query(
+        `INSERT INTO ai_summaries (document_id, summary_text, review_status, ai_confidence)
+         VALUES ($1, $2, $3, $4)`,
+        [documentId, summary, 'draft', clampConfidence(parsed.summary_confidence, 0.7)]
+      );
     }
 
-    // Store decisions (delete old ones first and re-insert)
+    // Store decisions (replace AI-generated ones)
     await query('DELETE FROM decisions WHERE document_id = $1 AND created_by_ai = true', [documentId]);
-    for (const decisionText of decisions) {
-      if (decisionText.trim()) {
+    for (const d of decisions) {
+      const text = typeof d === 'string' ? d : d?.text;
+      if (text && String(text).trim()) {
         await query(
-          `INSERT INTO decisions (document_id, decision_text, review_status, ai_confidence, created_by_ai)
-           VALUES ($1, $2, $3, $4, true)`,
-          [documentId, decisionText, 'draft', 0.82]
+          `INSERT INTO decisions (document_id, decision_text, source_excerpt, review_status, ai_confidence, created_by_ai)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [documentId, String(text).trim(), d?.source || null, 'draft', clampConfidence(d?.confidence, 0.7)]
         );
       }
     }
 
-    // Call Bedrock to extract action items
-    const actionItemsPrompt = `Extract all action items, tasks, and next steps from this document.
-For each item, identify: title, suggested owner (by name if mentioned), and deadline if mentioned.
-Format as JSON array with objects containing: title, suggested_owner_text, deadline.
-
-Document:
-${documentText}
-
-Return ONLY valid JSON array with no markdown formatting. Example: [{"title":"Task 1","suggested_owner_text":"John","deadline":"2026-09-15"}]`;
-
-    const actionItemsText = await callBedrock(actionItemsPrompt);
-    let actionItems: Array<{ title: string; suggested_owner_text?: string; deadline?: string }> = [];
-    try {
-      actionItems = JSON.parse(actionItemsText);
-    } catch {
-      actionItems = [];
-    }
+    // Replace previously AI-drafted action items (keep any already reviewed).
+    await query(
+      `DELETE FROM action_items
+       WHERE document_id = $1 AND created_by_ai = true AND status = 'draft'`,
+      [documentId]
+    );
 
     // Store action items
     for (const item of actionItems) {
-      if (item.title?.trim()) {
+      if (item?.title && String(item.title).trim()) {
         await query(
           `INSERT INTO action_items (
-            document_id, project_id, task_title, suggested_owner_text,
+            document_id, project_id, task_title, source_excerpt, suggested_owner_text,
             deadline, status, risk_level, created_by_ai, ai_confidence
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)`,
           [
             documentId,
             document.project_id,
-            item.title,
-            item.suggested_owner_text || null,
-            item.deadline || null,
+            String(item.title).trim(),
+            item.source || null,
+            item.suggested_owner || item.suggested_owner_text || null,
+            cleanDeadline(item.deadline),
             'draft',
-            'medium',
-            0.80,
+            cleanRisk(item.risk),
+            clampConfidence(item.confidence, 0.7),
           ]
         );
       }

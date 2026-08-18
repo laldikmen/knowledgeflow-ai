@@ -90,13 +90,13 @@ const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: 'risk', label: 'Risk' },
 ];
 
-const getInitials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
+// Normalize a backend project_role ('manager') to the display MemberRole ('Manager').
+const toMemberRole = (role?: string): MemberRole => {
+  const r = (role || '').toLowerCase();
+  if (r === 'manager') return 'Manager';
+  if (r === 'viewer') return 'Viewer';
+  return 'Contributor';
+};
 
 const normalizedRoleAllowsMemberManagement = (role: string) => {
   const normalized = role.trim().toLowerCase();
@@ -120,12 +120,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [activeTab, setActiveTab] = useState<ProjectTab>('overview');
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [isMemberPanelOpen, setIsMemberPanelOpen] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [allUsers, setAllUsers] = useState<{ id: number; name: string; email: string }[]>([]);
+  const [newMemberUserId, setNewMemberUserId] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<MemberRole>('Contributor');
+  const [memberError, setMemberError] = useState('');
 
-  useEffect(() => {
-    const fetchProject = async () => {
+  const loadProject = async () => {
       setIsLoading(true);
       try {
         const response = await client.get(`/projects/${projectId}`);
@@ -163,7 +163,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             name: member.name,
             email: member.email,
             initials: extractInitials(member.name),
-            role: member.project_role || member.role || 'contributor',
+            role: toMemberRole(member.project_role || member.role),
             avatarTone: (member.avatar_tone || 'blue') as ProjectMember['avatarTone'],
           })) || [],
           recentDocuments: data.recent_documents?.map((doc: any) => ({
@@ -211,14 +211,32 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       } finally {
         setIsLoading(false);
       }
-    };
+  };
 
+  useEffect(() => {
     if (projectId) {
-      fetchProject();
+      loadProject();
     }
     setActiveTab('overview');
     setIsMemberPanelOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  // Load the full user list so members can be picked from real accounts.
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await client.get('/users');
+        setAllUsers(
+          (response.data || []).map((u: any) => ({ id: u.id, name: u.name, email: u.email })),
+        );
+      } catch (error) {
+        console.error('Failed to load users', error);
+        setAllUsers([]);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const canManageMembers = useMemo(() => {
     if (!project) return false;
@@ -259,42 +277,51 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const visibleMemberAvatars = members.slice(0, 3);
   const additionalMemberCount = Math.max(members.length - visibleMemberAvatars.length, 0);
 
-  const handleAddMember = (event: React.FormEvent<HTMLFormElement>) => {
+  // Map the display role to the backend's lowercase project_role.
+  const toProjectRole = (role: MemberRole): string => role.toLowerCase();
+
+  const handleAddMember = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setMemberError('');
 
-    const trimmedName = newMemberName.trim();
-    const trimmedEmail = newMemberEmail.trim();
-    if (!trimmedName || !trimmedEmail) return;
+    if (!newMemberUserId) {
+      setMemberError('Choose a user to add.');
+      return;
+    }
 
-    setMembers((currentMembers) => [
-      ...currentMembers,
-      {
-        id: Date.now(),
-        name: trimmedName,
-        email: trimmedEmail,
-        initials: getInitials(trimmedName),
-        role: newMemberRole,
-        avatarTone: 'blue',
-      },
-    ]);
-
-    setNewMemberName('');
-    setNewMemberEmail('');
-    setNewMemberRole('Contributor');
+    try {
+      await client.post(`/projects/${projectId}/members`, {
+        user_id: Number(newMemberUserId),
+        project_role: toProjectRole(newMemberRole),
+      });
+      await loadProject();
+      setNewMemberUserId('');
+      setNewMemberRole('Contributor');
+    } catch (error: any) {
+      setMemberError(error.response?.data?.error || 'Could not add the member.');
+    }
   };
 
-  const handleRoleChange = (memberId: number, role: MemberRole) => {
-    setMembers((currentMembers) =>
-      currentMembers.map((member) =>
-        member.id === memberId ? { ...member, role } : member,
-      ),
-    );
+  // Changing a role re-posts the membership (backend upserts on conflict).
+  const handleRoleChange = async (memberId: number, role: MemberRole) => {
+    try {
+      await client.post(`/projects/${projectId}/members`, {
+        user_id: memberId,
+        project_role: toProjectRole(role),
+      });
+      await loadProject();
+    } catch (error) {
+      console.error('Failed to change member role', error);
+    }
   };
 
-  const handleRemoveMember = (memberId: number) => {
-    setMembers((currentMembers) =>
-      currentMembers.filter((member) => member.id !== memberId),
-    );
+  const handleRemoveMember = async (memberId: number) => {
+    try {
+      await client.delete(`/projects/${projectId}/members/${memberId}`);
+      await loadProject();
+    } catch (error) {
+      console.error('Failed to remove member', error);
+    }
   };
 
   const renderMembersList = (compact = false) => (
@@ -733,22 +760,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
             <form className="project-member-add-form" onSubmit={handleAddMember}>
               <label>
-                Name
-                <input
-                  type="text"
-                  value={newMemberName}
-                  onChange={(event) => setNewMemberName(event.target.value)}
-                  placeholder="Full name"
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  type="email"
-                  value={newMemberEmail}
-                  onChange={(event) => setNewMemberEmail(event.target.value)}
-                  placeholder="name@company.com"
-                />
+                User
+                <select
+                  value={newMemberUserId}
+                  onChange={(event) => setNewMemberUserId(event.target.value)}
+                >
+                  <option value="">Select a user…</option>
+                  {allUsers
+                    .filter((u) => !members.some((m) => m.id === u.id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.email})
+                      </option>
+                    ))}
+                </select>
               </label>
               <label>
                 Project role
@@ -763,6 +788,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </label>
               <button type="submit">Add member</button>
             </form>
+            {memberError && <div className="project-member-add-error">{memberError}</div>}
 
             <div className="project-member-modal-list-heading">
               <strong>Current members</strong>

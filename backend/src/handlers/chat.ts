@@ -1,60 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
-import * as AWS from 'aws-sdk';
-
-// TODO: Bedrock initialization - use bedrock-runtime library instead of aws-sdk v2
-// const bedrock = new AWS.Bedrock({...});
-// const bedrockRuntime = new AWS.BedrockRuntime({
-//   region: process.env.S3_REGION || 'us-east-1',
-// });
-
-interface ClaudeResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-}
-
-async function callBedrock(prompt: string): Promise<string> {
-  try {
-    // Mock responses for MVP testing - replace with real Bedrock call when configured
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[MOCK AI Chat] Processing question');
-
-      if (
-        prompt.toLowerCase().includes('decision') ||
-        prompt.toLowerCase().includes('decided')
-      ) {
-        return 'Based on the available documents, the key decisions made include: 1) Infrastructure migration to cloud, 2) Marketing budget increase, 3) API modernization. These were confirmed by project managers and are documented in the meeting transcripts.';
-      } else if (
-        prompt.toLowerCase().includes('deadline') ||
-        prompt.toLowerCase().includes('when')
-      ) {
-        return 'According to the extracted tasks, the main deadlines are: Cloud migration by October 31st, 2026; Marketing initiatives by September 15th, 2026; API deprecation by December 31st, 2026. These timelines are tracked in the action items and dashboard.';
-      } else if (
-        prompt.toLowerCase().includes('owner') ||
-        prompt.toLowerCase().includes('responsible')
-      ) {
-        return 'Based on the task assignments and suggested owners from the documents: John Smith leads the database migration, Sarah Johnson oversees marketing initiatives, and the Engineering Lead manages API modernization. Specific task assignments can be found in the task tracker.';
-      } else if (
-        prompt.toLowerCase().includes('summary') ||
-        prompt.toLowerCase().includes('overview')
-      ) {
-        return 'The project involves strategic initiatives for Q3-Q4 including cloud infrastructure migration, marketing expansion, and API modernization. All initiatives have been documented with clear ownership, deadlines, and risk assessments.';
-      }
-
-      return 'Based on the available documents in this project, I can see information about meetings, decisions, and tasks. For a more specific answer, could you rephrase your question to be more specific about what you\'re looking for (e.g., "What were the decisions?", "Who is responsible?", "What are the deadlines?")?';
-    }
-
-    // TODO: Real Bedrock API call - implement when bedrock-runtime library is installed
-    // const params = { ... };
-    // const response = await bedrockRuntime.invokeModel(params).promise();
-    throw new Error('Bedrock API not configured. Set NODE_ENV=development for mock responses.');
-  } catch (error) {
-    console.error('Bedrock API error:', error);
-    throw new Error('Failed to call Bedrock API');
-  }
-}
+import { callBedrock } from './ai';
 
 function extractKeywords(text: string): string[] {
   return text

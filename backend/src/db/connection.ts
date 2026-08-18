@@ -1,8 +1,13 @@
-import { Pool, QueryResult } from 'pg';
+import { Pool, QueryResult, types } from 'pg';
 import dotenv from 'dotenv';
 import * as AWS from 'aws-sdk';
 
 dotenv.config();
+
+// Return DATE columns (OID 1082) as the raw 'YYYY-MM-DD' string instead of a
+// timezone-shifted Date object, so a deadline never lands on the wrong day.
+// (TIMESTAMP columns are unaffected and keep their instant semantics.)
+types.setTypeParser(1082, (value) => value);
 
 let pool: Pool;
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import './ActionTracker.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { formatDateOnly } from '../utils/date';
 
 type TaskStatus = 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
 type TaskRisk = 'low' | 'medium' | 'high';
@@ -89,12 +90,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
           .toUpperCase()
           .slice(0, 2),
         ownerName: task.owner_name,
-        dueDate: task.deadline
-          ? new Date(task.deadline).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            })
-          : undefined,
+        dueDate: task.deadline ? formatDateOnly(task.deadline) : undefined,
         status: task.status || 'draft',
         risk: task.risk_level || 'medium',
         overdue: Number(task.overdue_days) > 0,

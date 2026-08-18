@@ -102,83 +102,79 @@ export const processDocument = async (req: Request, res: Response) => {
 
     const documentText = textResult.rows[0].extracted_text;
 
-    // Call Bedrock to generate summary
-    const summaryPrompt = `Analyze the following document and provide a concise summary (2-3 paragraphs).
+    // One classified extraction call. The model separates DECISIONS (choices that
+    // were settled) from ACTION ITEMS (work to be done) — an item goes in exactly
+    // one list — and self-reports a 0-1 confidence per item.
+    const extractionPrompt = `You extract structured knowledge from a business document.
+
+Return ONLY a single JSON object (no markdown, no commentary) with this exact shape:
+{
+  "summary": "a concise 2-3 paragraph summary",
+  "summary_confidence": 0.0,
+  "decisions": [ { "text": "the decision", "confidence": 0.0 } ],
+  "action_items": [ { "title": "the task", "suggested_owner": "person name or null", "deadline": "YYYY-MM-DD or null", "risk": "low|medium|high", "confidence": 0.0 } ]
+}
+
+Classify every extracted item into EXACTLY ONE list:
+- A DECISION is a conclusion or choice that was settled — what the group decided. It is not something still to be done and has no owner or deadline. Example: "Standardize on Amazon S3 for document storage."
+- An ACTION ITEM is work someone must do — it has an action verb and usually an owner and/or a deadline. Example: "Set up the migration task force by Aug 31."
+- If an item reads as both, put it in action_items when it describes work to be done; otherwise decisions. NEVER put the same item in both lists.
+- "confidence" is your own 0.0-1.0 estimate of how clearly the item is stated in the document.
+- "risk" is your estimate of how risky/urgent the action item is.
 
 Document:
-${documentText}
+${documentText}`;
 
-Provide only the summary, nothing else.`;
+    const raw = await callBedrock(extractionPrompt, 4096);
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(extractJson(raw));
+    } catch {
+      parsed = {};
+    }
 
-    const summary = await callBedrock(summaryPrompt);
+    const clampConfidence = (value: any, fallback: number): number => {
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+    };
+    const cleanDeadline = (value?: string | null): string | null => {
+      if (!value) return null;
+      const match = String(value).match(/\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : null;
+    };
+    const cleanRisk = (value?: string): string =>
+      ['low', 'medium', 'high'].includes(String(value)) ? String(value) : 'medium';
+
+    const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
+    const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
+    const actionItems = Array.isArray(parsed.action_items) ? parsed.action_items : [];
 
     // Store summary (delete old one first if exists)
     await query('DELETE FROM ai_summaries WHERE document_id = $1', [documentId]);
-    await query(
-      `INSERT INTO ai_summaries (document_id, summary_text, review_status, ai_confidence)
-       VALUES ($1, $2, $3, $4)`,
-      [documentId, summary, 'draft', 0.85]
-    );
-
-    // Call Bedrock to extract decisions
-    const decisionsPrompt = `Extract all key decisions made in this document. Format as a JSON array of strings.
-
-Document:
-${documentText}
-
-Return ONLY valid JSON array with no markdown formatting or explanation. Example: ["Decision 1", "Decision 2"]`;
-
-    const decisionsText = await callBedrock(decisionsPrompt);
-    let decisions: string[] = [];
-    try {
-      const parsed = JSON.parse(extractJson(decisionsText));
-      decisions = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      decisions = [];
+    if (summary.trim()) {
+      await query(
+        `INSERT INTO ai_summaries (document_id, summary_text, review_status, ai_confidence)
+         VALUES ($1, $2, $3, $4)`,
+        [documentId, summary, 'draft', clampConfidence(parsed.summary_confidence, 0.7)]
+      );
     }
 
-    // Store decisions (delete old ones first and re-insert)
+    // Store decisions (replace AI-generated ones)
     await query('DELETE FROM decisions WHERE document_id = $1 AND created_by_ai = true', [documentId]);
-    for (const decisionText of decisions) {
-      if (decisionText.trim()) {
+    for (const d of decisions) {
+      const text = typeof d === 'string' ? d : d?.text;
+      if (text && String(text).trim()) {
         await query(
           `INSERT INTO decisions (document_id, decision_text, review_status, ai_confidence, created_by_ai)
            VALUES ($1, $2, $3, $4, true)`,
-          [documentId, decisionText, 'draft', 0.82]
+          [documentId, String(text).trim(), 'draft', clampConfidence(d?.confidence, 0.7)]
         );
       }
     }
 
-    // Call Bedrock to extract action items
-    const actionItemsPrompt = `Extract all action items, tasks, and next steps from this document.
-For each item, identify: title, suggested owner (by name if mentioned), and deadline if mentioned.
-Format as JSON array with objects containing: title, suggested_owner_text, deadline.
-
-Document:
-${documentText}
-
-Return ONLY valid JSON array with no markdown formatting. Example: [{"title":"Task 1","suggested_owner_text":"John","deadline":"2026-09-15"}]`;
-
-    const actionItemsText = await callBedrock(actionItemsPrompt);
-    let actionItems: Array<{ title: string; suggested_owner_text?: string; deadline?: string }> = [];
-    try {
-      const parsed = JSON.parse(extractJson(actionItemsText));
-      actionItems = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      actionItems = [];
-    }
-
-    // Only accept a real ISO-ish date (YYYY-MM-DD) for the deadline; the model may
-    // return free text like "next quarter" which the DATE column would reject.
-    const cleanDeadline = (value?: string): string | null => {
-      if (!value) return null;
-      const match = value.match(/\d{4}-\d{2}-\d{2}/);
-      return match ? match[0] : null;
-    };
-
     // Store action items
     for (const item of actionItems) {
-      if (item.title?.trim()) {
+      if (item?.title && String(item.title).trim()) {
         await query(
           `INSERT INTO action_items (
             document_id, project_id, task_title, suggested_owner_text,
@@ -187,12 +183,12 @@ Return ONLY valid JSON array with no markdown formatting. Example: [{"title":"Ta
           [
             documentId,
             document.project_id,
-            item.title,
-            item.suggested_owner_text || null,
+            String(item.title).trim(),
+            item.suggested_owner || item.suggested_owner_text || null,
             cleanDeadline(item.deadline),
             'draft',
-            'medium',
-            0.80,
+            cleanRisk(item.risk),
+            clampConfidence(item.confidence, 0.7),
           ]
         );
       }

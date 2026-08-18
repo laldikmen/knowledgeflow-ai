@@ -313,6 +313,39 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
         confidence: row.ai_confidence,
       }));
 
+    // AI-extracted action items for this document (drafts awaiting review).
+    // Viewers only see confirmed ones, per the access rules.
+    const actionItemsResult = await query(
+      `SELECT
+        a.id, a.task_title, a.description, a.source_excerpt,
+        a.suggested_owner_text, a.deadline, a.risk_level, a.status, a.ai_confidence,
+        u.name AS assigned_to_name, p.name AS project_name
+      FROM action_items a
+      LEFT JOIN users u ON a.assigned_to_user_id = u.id
+      LEFT JOIN projects p ON a.project_id = p.id
+      WHERE a.document_id = $1
+      ORDER BY a.id ASC`,
+      [documentId]
+    );
+
+    document.action_items = actionItemsResult.rows
+      .filter((row) => !isViewer || row.status === 'confirmed')
+      .map((row) => ({
+        id: row.id,
+        title: row.task_title,
+        description: row.description,
+        source: row.source_excerpt,
+        // Display name = the assigned user, or the AI-suggested owner while unassigned.
+        owner: row.assigned_to_name || row.suggested_owner_text || '',
+        owner_suggested: !row.assigned_to_name && !!row.suggested_owner_text,
+        deadline: row.deadline,
+        deadline_suggested: !!row.deadline && row.status === 'draft',
+        priority: row.risk_level,
+        status: row.status,
+        confidence: row.ai_confidence,
+        project_name: row.project_name,
+      }));
+
     return res.json({
       success: true,
       data: document,

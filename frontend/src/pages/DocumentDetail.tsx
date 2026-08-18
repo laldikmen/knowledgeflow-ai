@@ -4,6 +4,7 @@ import client from '../api/client';
 import './DocumentDetail.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TaskEditModal, type TaskEditValues } from '../components/TaskEditModal';
+import { formatDateOnly } from '../utils/date';
 
 type DocumentStatus = 'processed' | 'processing' | 'uploaded' | 'failed';
 type ReviewStatus = 'draft' | 'confirmed' | 'rejected';
@@ -227,11 +228,11 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             title: item.title,
             owner: item.owner,
             ownerSuggested: item.owner_suggested,
-            deadline: item.deadline,
+            deadline: item.deadline ? formatDateOnly(item.deadline) : undefined,
             deadlineSuggested: item.deadline_suggested,
             priority: (item.priority || 'Medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1) as Priority,
             source: item.source,
-            confidence: item.confidence,
+            confidence: Number(item.confidence) || 0,
             status: item.status || 'draft',
             overdueDays: item.overdue_days,
             description: item.description,
@@ -760,9 +761,12 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
 
                         <div className="document-detail-action-meta">
                           <span className="document-detail-owner-avatar">
-                            {item.owner.charAt(0).toUpperCase()}
+                            {(item.owner || 'U').charAt(0).toUpperCase()}
                           </span>
-                          <span>{item.owner}{item.ownerSuggested ? ' (suggested)' : ''}</span>
+                          <span>
+                            {item.owner || 'Unassigned'}
+                            {item.ownerSuggested ? ' (suggested)' : ''}
+                          </span>
                           <span className={item.overdueDays ? 'document-detail-overdue-text' : ''}>
                             Due {item.deadline}{item.overdueDays ? ` · ${item.overdueDays} days late` : ''}
                             {item.deadlineSuggested ? ' (suggested)' : ''}

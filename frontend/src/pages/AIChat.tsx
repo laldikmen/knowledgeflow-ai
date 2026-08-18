@@ -127,8 +127,8 @@ export const AIChat: React.FC = () => {
       return {
         content: data.answer || data.content,
         source: firstSource ? {
-          title: firstSource.title,
-          meta: firstSource.meta,
+          title: firstSource.document_title || firstSource.title,
+          meta: firstSource.excerpt || firstSource.meta,
         } : undefined,
         unavailable: false,
       };

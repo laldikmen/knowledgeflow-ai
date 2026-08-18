@@ -2,41 +2,40 @@ import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
 
-// TODO: Bedrock initialization - use bedrock-runtime library instead of aws-sdk v2
-// const bedrock = new AWS.Bedrock({...});
-// const bedrockRuntime = new AWS.BedrockRuntime({...});
+// Newer Claude models on Bedrock require a cross-region inference profile and the
+// Converse API (on-demand direct invoke is not supported).
+const BEDROCK_REGION = process.env.BEDROCK_REGION || process.env.S3_REGION || 'eu-central-1';
+const BEDROCK_MODEL_ID =
+  process.env.BEDROCK_MODEL_ID || 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
 
-interface ClaudeResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-}
+const bedrockRuntime = new AWS.BedrockRuntime({ region: BEDROCK_REGION });
 
-async function callBedrock(prompt: string): Promise<string> {
+// Send a prompt to Bedrock (Converse API) and return the model's text reply.
+export async function callBedrock(
+  prompt: string,
+  maxTokens = 2048,
+): Promise<string> {
   try {
-    // Mock responses for MVP testing - replace with real Bedrock call when configured
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[MOCK AI] Processing with mock responses');
+    const response = await bedrockRuntime
+      .converse({
+        modelId: BEDROCK_MODEL_ID,
+        messages: [{ role: 'user', content: [{ text: prompt }] }],
+        inferenceConfig: { maxTokens, temperature: 0 },
+      })
+      .promise();
 
-      if (prompt.includes('summary')) {
-        return 'This document outlines strategic initiatives for Q3-Q4. Key focuses include cloud infrastructure migration, marketing budget expansion, and API modernization. The team identified critical dependencies and risks around resource allocation and timeline management.';
-      } else if (prompt.includes('Extract all key decisions')) {
-        return '["Migrate databases to cloud infrastructure by October 31st", "Increase marketing budget by 20%", "Deprecate legacy API by December 31st 2026", "Establish migration task force by end of August"]';
-      } else if (prompt.includes('Extract all action items')) {
-        return '[{"title":"Set up migration task force","suggested_owner_text":"John Smith","deadline":"2026-08-31"},{"title":"Allocate 20% additional marketing budget","suggested_owner_text":"Sarah Johnson","deadline":"2026-09-15"},{"title":"Communicate API deprecation to stakeholders","suggested_owner_text":"Engineering Lead","deadline":"2026-09-01"}]';
-      }
-      return '';
-    }
-
-    // TODO: Real Bedrock API call - implement when bedrock-runtime library is installed
-    // const params = { ... };
-    // const response = await bedrockRuntime.invokeModel(params).promise();
-    throw new Error('Bedrock API not configured. Set NODE_ENV=development for mock responses.');
+    const parts = response.output?.message?.content || [];
+    return parts.map((p: any) => p.text || '').join('').trim();
   } catch (error) {
     console.error('Bedrock API error:', error);
     throw new Error('Failed to call Bedrock API');
   }
+}
+
+// Claude often wraps JSON in ```json fences; strip them before parsing.
+export function extractJson(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  return (fenced ? fenced[1] : text).trim();
 }
 
 export const processDocument = async (req: Request, res: Response) => {
@@ -132,9 +131,10 @@ Return ONLY valid JSON array with no markdown formatting or explanation. Example
     const decisionsText = await callBedrock(decisionsPrompt);
     let decisions: string[] = [];
     try {
-      decisions = JSON.parse(decisionsText);
+      const parsed = JSON.parse(extractJson(decisionsText));
+      decisions = Array.isArray(parsed) ? parsed : [];
     } catch {
-      decisions = [decisionsText];
+      decisions = [];
     }
 
     // Store decisions (delete old ones first and re-insert)
@@ -162,10 +162,19 @@ Return ONLY valid JSON array with no markdown formatting. Example: [{"title":"Ta
     const actionItemsText = await callBedrock(actionItemsPrompt);
     let actionItems: Array<{ title: string; suggested_owner_text?: string; deadline?: string }> = [];
     try {
-      actionItems = JSON.parse(actionItemsText);
+      const parsed = JSON.parse(extractJson(actionItemsText));
+      actionItems = Array.isArray(parsed) ? parsed : [];
     } catch {
       actionItems = [];
     }
+
+    // Only accept a real ISO-ish date (YYYY-MM-DD) for the deadline; the model may
+    // return free text like "next quarter" which the DATE column would reject.
+    const cleanDeadline = (value?: string): string | null => {
+      if (!value) return null;
+      const match = value.match(/\d{4}-\d{2}-\d{2}/);
+      return match ? match[0] : null;
+    };
 
     // Store action items
     for (const item of actionItems) {
@@ -180,7 +189,7 @@ Return ONLY valid JSON array with no markdown formatting. Example: [{"title":"Ta
             document.project_id,
             item.title,
             item.suggested_owner_text || null,
-            item.deadline || null,
+            cleanDeadline(item.deadline),
             'draft',
             'medium',
             0.80,

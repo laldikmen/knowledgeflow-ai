@@ -562,6 +562,27 @@
   border-bottom: 0;
 }
 
+.project-table-row--clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.project-table-row--clickable:hover {
+  background: #faf7f1;
+}
+
+.project-table-row--clickable:focus-visible {
+  outline: 2px solid #d8a72a;
+  outline-offset: -2px;
+}
+
+.project-table-empty {
+  padding: 28px 20px;
+  color: #9a9387;
+  font-size: 14px;
+  text-align: center;
+}
+
 .project-file-name {
   min-width: 0;
   display: flex;
@@ -714,6 +735,32 @@
   font-family: var(--sans);
   font-size: 12px;
   outline: none;
+}
+
+/* Themed dropdowns: custom chevron in the theme's muted brown instead of the
+   OS default arrow (matches the Upload Center selects). */
+.project-member-controls select,
+.project-member-add-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a7f63' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+}
+
+.project-member-controls select:hover,
+.project-member-add-form select:hover {
+  border-color: #cdbf9c;
+}
+
+.project-member-controls select option,
+.project-member-add-form select option {
+  color: #514a40;
+  background: #ffffff;
 }
 
 .project-member-controls select:focus,

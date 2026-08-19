@@ -8,7 +8,9 @@ interface HeaderProps {
   actionLabel?: string;
   actionIcon?: 'plus' | 'upload';
   showNotifications?: boolean;
+  initialQuery?: string;
   onSearch?: (query: string) => void;
+  onSearchSubmit?: (query: string) => void;
   onAction?: () => void;
   onNotifications?: () => void;
 }
@@ -20,16 +22,23 @@ export const Header: React.FC<HeaderProps> = ({
   actionLabel,
   actionIcon = 'plus',
   showNotifications = false,
+  initialQuery = '',
   onSearch,
+  onSearchSubmit,
   onAction,
   onNotifications,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const nextValue = e.target.value;
     setSearchQuery(nextValue);
     onSearch?.(nextValue);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSearchSubmit?.(searchQuery.trim());
   };
 
   return (
@@ -41,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       <div className="header-actions">
         {searchPlaceholder && (
-          <label className="header-search">
+          <form className="header-search" onSubmit={handleSearchSubmit} role="search">
             <span className="header-search-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="6.5" />
@@ -56,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
               onChange={handleSearchChange}
               aria-label={searchPlaceholder}
             />
-          </label>
+          </form>
         )}
 
         {actionLabel && (

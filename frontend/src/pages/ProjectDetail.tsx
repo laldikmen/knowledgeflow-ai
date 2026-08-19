@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import client from '../api/client';
+import { formatDateOnly } from '../utils/date';
 import './ProjectDetail.css';
 
 type ProjectRole = 'Manager' | 'Contributor' | 'Viewer';
@@ -184,11 +185,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             id: task.id,
             title: task.title,
             owner: task.owner,
-            dueDate: new Date(task.due_date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            }),
+            dueDate: task.due_date ? formatDateOnly(task.due_date) : 'No deadline',
             status: task.status,
           })) || [],
           activity: data.activity?.map((act: any) => ({
@@ -468,8 +465,26 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <span>Uploaded by</span>
             <span>Status</span>
           </div>
+          {project.recentDocuments.length === 0 && (
+            <div className="project-table-empty">
+              No documents have been uploaded to this project yet.
+            </div>
+          )}
           {project.recentDocuments.map((document) => (
-            <div className="project-table-row" key={document.id}>
+            <div
+              className="project-table-row project-table-row--clickable"
+              key={document.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${document.name}`}
+              onClick={() => navigate(`/documents/${document.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigate(`/documents/${document.id}`);
+                }
+              }}
+            >
               <div className="project-file-name">
                 <span className="project-file-icon" aria-hidden="true">
                   {document.kind === 'Meeting' ? '◷' : '▤'}
@@ -506,6 +521,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       </div>
 
       <div className="project-task-list">
+        {project.tasks.length === 0 && (
+          <div className="project-table-empty">
+            No confirmed tasks in this project yet.
+          </div>
+        )}
         {project.tasks.map((task) => (
           <article className="project-task-card" key={task.id}>
             <div>
@@ -567,6 +587,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       </div>
 
       <div className="project-activity-card">
+        {project.activity.length === 0 && (
+          <div className="project-table-empty">
+            No recent activity in this project yet.
+          </div>
+        )}
         {project.activity.map((activity, index) => (
           <div className="project-activity-row" key={activity.id}>
             <div className="project-activity-rail" aria-hidden="true">
@@ -674,7 +699,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </span>
           </div>
           <p>
-            {project.department} Department · {project.workstream}
+            {project.department} Department
+            {project.workstream ? ` · ${project.workstream}` : ''}
           </p>
         </div>
 

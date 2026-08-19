@@ -219,7 +219,7 @@ export const Upload: React.FC = () => {
               multiple
               onChange={handleFileSelect}
               className="upload-file-input"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.vtt"
+              accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.vtt,.srt"
             />
 
             <div className="upload-dropzone-icon" aria-hidden="true">

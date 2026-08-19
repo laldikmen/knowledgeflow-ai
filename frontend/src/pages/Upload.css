@@ -245,6 +245,25 @@
 
 select.upload-control {
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 44px;
+  /* Custom chevron in the theme's muted brown, so the control matches the page
+     instead of showing the OS default arrow. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a7f63' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 16px 16px;
+  text-overflow: ellipsis;
+}
+
+select.upload-control:hover {
+  border-color: #cdbf9c;
+}
+
+select.upload-control:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23b98f1c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 
 .upload-control::placeholder {
@@ -254,6 +273,12 @@ select.upload-control {
 .upload-control:focus {
   border-color: #d5ad20;
   box-shadow: 0 0 0 3px rgba(248, 204, 63, 0.14);
+}
+
+/* Native option list — themes the popup where the browser allows it. */
+select.upload-control option {
+  color: #37332c;
+  background: #fbfaf7;
 }
 
 .upload-textarea {

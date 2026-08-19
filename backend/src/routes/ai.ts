@@ -2,7 +2,9 @@ import express from 'express';
 import {
   processDocument,
   reviewSummary,
+  updateSummary,
   reviewDecision,
+  updateDecision,
   reviewActionItem,
   getAISummary,
   getAIDecisions,
@@ -19,7 +21,9 @@ router.post('/process/:documentId', processDocument);
 
 // Review AI-generated content
 router.post('/summary/:documentId/review', reviewSummary);
+router.patch('/summary/:documentId', updateSummary);
 router.post('/decision/:decisionId/review', reviewDecision);
+router.patch('/decision/:decisionId', updateDecision);
 router.post('/action-item/:taskId/review', reviewActionItem);
 
 // Get AI-generated content

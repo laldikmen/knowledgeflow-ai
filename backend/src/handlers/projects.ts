@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
-import { computeSingleProjectRisk } from '../utils/risk';
+import { computeSingleProjectRisk, computeProjectRisk } from '../utils/risk';
 
 export const getAccessibleProjects = async (req: Request, res: Response) => {
   try {
@@ -23,6 +23,8 @@ export const getAccessibleProjects = async (req: Request, res: Response) => {
           (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'confirmed') as confirmed_task_count,
           (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'in_progress') as in_progress_task_count,
           (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'draft') as draft_task_count,
+          (SELECT COUNT(*) FROM action_items WHERE project_id = p.id
+             AND deadline < CURRENT_DATE AND status IN ('confirmed', 'in_progress')) as overdue_task_count,
           p.created_at
         FROM projects p
         LEFT JOIN users u ON p.created_by = u.id
@@ -40,6 +42,8 @@ export const getAccessibleProjects = async (req: Request, res: Response) => {
           (SELECT COUNT(*) FROM documents WHERE project_id = p.id) as document_count,
           (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'confirmed') as confirmed_task_count,
           (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'in_progress') as in_progress_task_count,
+          (SELECT COUNT(*) FROM action_items WHERE project_id = p.id
+             AND deadline < CURRENT_DATE AND status IN ('confirmed', 'in_progress')) as overdue_task_count,
           p.created_at
         FROM projects p
         LEFT JOIN users u ON p.created_by = u.id
@@ -50,6 +54,15 @@ export const getAccessibleProjects = async (req: Request, res: Response) => {
       );
       projects = result.rows;
     }
+
+    // Attach each project's computed risk level (same leading-indicator model
+    // used on the dashboard) so the project card's risk pill is dynamic.
+    const riskMap = await computeProjectRisk(projects.map((p: any) => p.id));
+    projects = projects.map((p: any) => ({
+      ...p,
+      risk_level: riskMap.get(p.id)?.level ?? 'Low',
+      risk_score: riskMap.get(p.id)?.score ?? 0,
+    }));
 
     return res.json({
       success: true,
@@ -131,10 +144,137 @@ export const getProjectDetail = async (req: Request, res: Response) => {
 
     project.members = membersResult.rows;
 
+    // Current user's role in THIS project (drives the role pill). Admins who are
+    // not members still get the full "Manager" view.
+    const isAdmin = req.user.system_role === 'admin';
+    const myRole = accessResult.rows[0]?.project_role;
+    const capRole = (r?: string) =>
+      r === 'manager' ? 'Manager' : r === 'contributor' ? 'Contributor' : 'Viewer';
+    project.role = myRole ? capRole(myRole) : isAdmin ? 'Manager' : 'Viewer';
+    project.department = project.department_name;
+    const managerMember = membersResult.rows.find(
+      (m: any) => m.project_role === 'manager',
+    );
+    project.manager_name = managerMember?.name || project.created_by_name;
+
+    // Documents & Meetings for this project.
+    const docsResult = await query(
+      `SELECT d.id, d.title AS name, d.document_type, d.status, d.uploaded_at,
+              u.name AS uploaded_by
+       FROM documents d
+       LEFT JOIN users u ON d.uploaded_by = u.id
+       WHERE d.project_id = $1
+       ORDER BY d.uploaded_at DESC`,
+      [projectId],
+    );
+    project.recent_documents = docsResult.rows.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      kind: r.document_type === 'transcript' ? 'Meeting' : 'Document',
+      uploaded_at: r.uploaded_at,
+      uploaded_by: r.uploaded_by || 'Unknown',
+      status: r.status === 'processed' ? 'Ready' : 'Processing',
+    }));
+    project.processing_document_count = docsResult.rows.filter(
+      (r: any) => r.status !== 'processed',
+    ).length;
+
+    // Confirmed / active tasks with owner, deadline, and current status.
+    const tasksResult = await query(
+      `SELECT a.id, a.task_title AS title, a.deadline, a.status,
+              u.name AS owner,
+              (a.deadline < CURRENT_DATE AND a.status IN ('confirmed', 'in_progress')) AS is_overdue
+       FROM action_items a
+       LEFT JOIN users u ON a.assigned_to_user_id = u.id
+       WHERE a.project_id = $1 AND a.status IN ('confirmed', 'in_progress')
+       ORDER BY a.deadline ASC NULLS LAST, a.created_at DESC`,
+      [projectId],
+    );
+    project.tasks = tasksResult.rows.map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      owner: r.owner || 'Unassigned',
+      due_date: r.deadline,
+      status: r.is_overdue
+        ? 'Overdue'
+        : r.status === 'in_progress'
+          ? 'In Progress'
+          : 'Confirmed',
+    }));
+
+    // Recent activity: document uploads, task status changes, member joins.
+    const activityResult = await query(
+      `SELECT ROW_NUMBER() OVER (ORDER BY ts DESC) AS id, type, title, detail, ts
+       FROM (
+         SELECT 'document' AS type, d.title AS title,
+                COALESCE(u.name, 'Someone') || ' uploaded this document' AS detail,
+                d.uploaded_at AS ts
+         FROM documents d LEFT JOIN users u ON d.uploaded_by = u.id
+         WHERE d.project_id = $1
+         UNION ALL
+         SELECT 'task' AS type, a.task_title AS title,
+                'Task ' || REPLACE(h.new_status, '_', ' ')
+                  || COALESCE(' by ' || cu.name, '') AS detail,
+                h.changed_at AS ts
+         FROM task_status_history h
+         JOIN action_items a ON h.task_id = a.id
+         LEFT JOIN users cu ON h.changed_by = cu.id
+         WHERE a.project_id = $1
+         UNION ALL
+         SELECT 'member' AS type, u.name AS title,
+                'Joined as ' || pm.project_role AS detail,
+                pm.joined_at AS ts
+         FROM project_members pm JOIN users u ON pm.user_id = u.id
+         WHERE pm.project_id = $1
+       ) events
+       ORDER BY ts DESC
+       LIMIT 20`,
+      [projectId],
+    );
+    project.activity = activityResult.rows.map((r: any) => ({
+      id: Number(r.id),
+      type: r.type,
+      title: r.title,
+      detail: r.detail,
+      time: r.ts
+        ? new Date(r.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : '',
+    }));
+
     // Computed risk level for the risk chip (basic leading-indicator model).
     const risk = await computeSingleProjectRisk(Number(projectId));
     project.risk_level = risk.level;
     project.risk_detail = risk;
+    project.risk_summary =
+      'Risk is a leading-indicator score: 2× overdue + 2× due within 3 days but not started + 1× high-risk tasks + 1× unassigned active tasks. High if overdue > 2 or score ≥ 10; Medium if score ≥ 4; otherwise Low.';
+
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const riskFactors: string[] = [];
+    if (risk.overdue > 0) riskFactors.push(`${plural(risk.overdue, 'overdue task')}`);
+    if (risk.due_soon_unstarted > 0)
+      riskFactors.push(
+        `${plural(risk.due_soon_unstarted, 'task')} due within 3 days and not started`,
+      );
+    if (risk.high_risk > 0)
+      riskFactors.push(`${plural(risk.high_risk, 'task')} flagged high risk`);
+    if (risk.unassigned > 0)
+      riskFactors.push(`${plural(risk.unassigned, 'active task')} with no owner`);
+    if (riskFactors.length === 0)
+      riskFactors.push('No active risk signals right now.');
+    project.risk_factors = riskFactors;
+
+    const actions: string[] = [];
+    if (risk.overdue > 0)
+      actions.push('Reassign or extend deadlines on the overdue tasks.');
+    if (risk.due_soon_unstarted > 0)
+      actions.push('Start or reprioritize tasks with imminent deadlines.');
+    if (risk.high_risk > 0)
+      actions.push('Review high-risk tasks and confirm mitigation owners.');
+    if (risk.unassigned > 0)
+      actions.push('Assign an owner to each unassigned active task.');
+    if (actions.length === 0)
+      actions.push('No action needed — keep monitoring the project.');
+    project.mitigation_actions = actions;
 
     return res.json({
       success: true,

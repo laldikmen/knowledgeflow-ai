@@ -42,6 +42,7 @@ interface ExtractedActionItem {
   owner: string;
   ownerSuggested?: boolean;
   deadline: string;
+  deadlineRaw?: string;
   deadlineSuggested?: boolean;
   priority: Priority;
   source: string;
@@ -57,6 +58,7 @@ interface DocumentDetailData {
   id: number;
   name: string;
   projectName: string;
+  projectId?: number;
   typeLabel: string;
   status: DocumentStatus;
   uploadedBy: string;
@@ -172,8 +174,28 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     id: number;
   } | null>(null);
   const [reviewReason, setReviewReason] = useState('');
+  const [pendingDecisionReview, setPendingDecisionReview] = useState<{
+    type: 'confirm' | 'reject';
+    id: number;
+  } | null>(null);
+  const [decisionReason, setDecisionReason] = useState('');
   const [editingActionId, setEditingActionId] = useState<number | null>(null);
+  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const canReview = canReviewAiContent(currentUserRole);
+
+  // Real accounts / projects so an edited action item can be persisted with a
+  // resolved owner id and (if moved) a resolved project id.
+  useEffect(() => {
+    client
+      .get('/users')
+      .then((r) => setUsers((r.data || []).map((u: any) => ({ id: u.id, name: u.name }))))
+      .catch(() => setUsers([]));
+    client
+      .get('/projects')
+      .then((r) => setProjects((r.data || []).map((p: any) => ({ id: p.id, name: p.name }))))
+      .catch(() => setProjects([]));
+  }, []);
 
   const loadDocument = async () => {
       setIsLoading(true);
@@ -185,14 +207,21 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           id: data.id,
           name: data.title || data.name,
           projectName: data.project_name,
+          projectId: data.project_id,
           typeLabel: data.document_type || 'Document',
           status: data.status || 'uploaded',
-          uploadedBy: data.uploaded_by || data.created_by,
-          uploadedDate: new Date(data.created_at).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          }),
+          uploadedBy: data.uploaded_by_name || data.uploaded_by || 'Unknown',
+          uploadedDate: (() => {
+            const raw = data.uploaded_at || data.created_at;
+            const date = raw ? new Date(raw) : null;
+            return date && !Number.isNaN(date.getTime())
+              ? date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : '';
+          })(),
           analyzedIn: data.processed_in,
           fileSize: data.file_size_kb ? `${(data.file_size_kb / 1024).toFixed(1)} MB` : undefined,
           processingProgress: data.processing_progress,
@@ -229,6 +258,9 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             owner: item.owner,
             ownerSuggested: item.owner_suggested,
             deadline: item.deadline ? formatDateOnly(item.deadline) : undefined,
+            deadlineRaw: item.deadline
+              ? String(item.deadline).slice(0, 10)
+              : undefined,
             deadlineSuggested: item.deadline_suggested,
             priority: (item.priority || 'Medium').charAt(0).toUpperCase() + (item.priority || 'medium').slice(1) as Priority,
             source: item.source,
@@ -317,11 +349,16 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     }
   };
 
-  const updateDecisionStatus = async (id: number, status: ReviewStatus) => {
+  const updateDecisionStatus = async (
+    id: number,
+    status: ReviewStatus,
+    reviewNote = '',
+  ) => {
     if (status !== 'confirmed' && status !== 'rejected') return;
     try {
       await client.post(`/ai/decision/${id}/review`, {
         review_status: status,
+        review_note: reviewNote.trim() || undefined,
       });
       await loadDocument();
     } catch (error) {
@@ -329,27 +366,45 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     }
   };
 
-  const updateActionStatus = (
+  // Decisions get the same confirm/reject clarification modal as action items.
+  const openDecisionReview = (type: 'confirm' | 'reject', id: number) => {
+    setDecisionReason('');
+    setPendingDecisionReview({ type, id });
+  };
+
+  const closeDecisionReview = () => {
+    setPendingDecisionReview(null);
+    setDecisionReason('');
+  };
+
+  const confirmDecisionReview = async () => {
+    if (!pendingDecisionReview) return;
+    await updateDecisionStatus(
+      pendingDecisionReview.id,
+      pendingDecisionReview.type === 'confirm' ? 'confirmed' : 'rejected',
+      decisionReason,
+    );
+    closeDecisionReview();
+  };
+
+  // Persist an action-item review (confirm/reject) to the backend. This writes
+  // the status + task_status_history, so the Action Tracker and Project Timeline
+  // reflect it too. Re-fetch afterwards so the UI matches the database.
+  const updateActionStatus = async (
     id: number,
     status: ReviewStatus,
     rejectionReason = '',
   ) => {
-    setDocument((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        actionItems: current.actionItems.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                status,
-                rejectionReason:
-                  status === 'rejected' ? rejectionReason.trim() : undefined,
-              }
-            : item,
-        ),
-      };
-    });
+    if (status !== 'confirmed' && status !== 'rejected') return;
+    try {
+      await client.post(`/ai/action-item/${id}/review`, {
+        review_status: status,
+        review_note: rejectionReason.trim() || undefined,
+      });
+      await loadDocument();
+    } catch (error) {
+      console.error('Failed to review action item', error);
+    }
   };
 
   const startEditingSummary = () => {
@@ -366,36 +421,36 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   };
 
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editingTarget || !editText.trim()) return;
 
-    setDocument((current) => {
-      if (!current) return current;
-
-      if (editingTarget.kind === 'summary' && current.summary) {
-        return {
-          ...current,
-          summary: {
-            ...current.summary,
-            text: editText.trim(),
-            status: 'draft',
-          },
-        };
+    // Decision edits are persisted (backend resets them to Draft for re-review).
+    if (editingTarget.kind === 'decision') {
+      try {
+        await client.patch(`/ai/decision/${editingTarget.id}`, {
+          decision_text: editText.trim(),
+        });
+        await loadDocument();
+      } catch (error) {
+        console.error('Failed to save decision', error);
       }
+      setEditingTarget(null);
+      return;
+    }
 
-      if (editingTarget.kind === 'decision') {
-        return {
-          ...current,
-          decisions: current.decisions.map((decision) =>
-            decision.id === editingTarget.id
-              ? { ...decision, text: editText.trim(), status: 'draft' }
-              : decision,
-          ),
-        };
+    // Summary edits are persisted (backend resets them to Draft for re-review).
+    if (editingTarget.kind === 'summary') {
+      try {
+        await client.patch(`/ai/summary/${numericDocumentId}`, {
+          summary_text: editText.trim(),
+        });
+        await loadDocument();
+      } catch (error) {
+        console.error('Failed to save summary', error);
       }
-
-      return current;
-    });
+      setEditingTarget(null);
+      return;
+    }
 
     setEditingTarget(null);
   };
@@ -410,10 +465,10 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     setReviewReason('');
   };
 
-  const confirmActionReview = () => {
+  const confirmActionReview = async () => {
     if (!pendingActionReview) return;
 
-    updateActionStatus(
+    await updateActionStatus(
       pendingActionReview.id,
       pendingActionReview.type === 'confirm' ? 'confirmed' : 'rejected',
       reviewReason,
@@ -434,7 +489,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           `Complete “${editingActionItem.title}” and document the outcome for ${editingActionItem.projectName ?? document.projectName}.`,
         sourceContext: editingActionItem.source,
         owner: editingActionItem.owner,
-        deadline: editingActionItem.deadline,
+        deadline: editingActionItem.deadlineRaw ?? '',
         risk: editingActionItem.priority.toLowerCase() as TaskEditValues['risk'],
         projectName: editingActionItem.projectName ?? document.projectName,
       }
@@ -448,34 +503,37 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         projectName: document.projectName,
       };
 
-  const saveActionEdit = (values: TaskEditValues) => {
+  // Persist an action-item edit to the backend (PUT /tasks/:id) so the change
+  // survives a reload and flows to the Action Tracker / Timeline. Resolves the
+  // owner name to a real user id and only moves projects when actually changed.
+  const saveActionEdit = async (values: TaskEditValues) => {
     if (editingActionId === null) return;
 
-    setDocument((current) => {
-      if (!current) return current;
+    const matchedUser = users.find(
+      (u) => u.name.trim().toLowerCase() === values.owner.trim().toLowerCase(),
+    );
+    const matchedProject = projects.find(
+      (p) => p.name.trim().toLowerCase() === values.projectName.trim().toLowerCase(),
+    );
+    const projectChanged =
+      matchedProject &&
+      values.projectName.trim().toLowerCase() !==
+        (document.projectName || '').trim().toLowerCase();
 
-      return {
-        ...current,
-        actionItems: current.actionItems.map((item) =>
-          item.id === editingActionId
-            ? {
-                ...item,
-                title: values.title,
-                description: values.description,
-                source: values.sourceContext,
-                owner: values.owner,
-                deadline: values.deadline,
-                priority: `${values.risk.charAt(0).toUpperCase()}${values.risk.slice(1)}` as Priority,
-                projectName: values.projectName,
-                ownerSuggested: false,
-                deadlineSuggested: false,
-                status: 'draft',
-                rejectionReason: undefined,
-              }
-            : item,
-        ),
-      };
-    });
+    try {
+      await client.put(`/tasks/${editingActionId}`, {
+        task_title: values.title,
+        description: values.description,
+        assigned_to_user_id: matchedUser ? matchedUser.id : null,
+        deadline: values.deadline || null,
+        risk_level: values.risk,
+        source_excerpt: values.sourceContext,
+        ...(projectChanged ? { project_id: matchedProject!.id } : {}),
+      });
+      await loadDocument();
+    } catch (error) {
+      console.error('Failed to save action item', error);
+    }
 
     setEditingActionId(null);
   };
@@ -544,6 +602,23 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             {statusText}
           </span>
         </div>
+
+        {document.projectName && (
+          <div className="document-detail-project-box">
+            <span className="document-detail-project-label">Project</span>
+            {document.projectId ? (
+              <button
+                type="button"
+                className="document-detail-project-name document-detail-project-name--link"
+                onClick={() => navigate(`/projects/${document.projectId}`)}
+              >
+                {document.projectName}
+              </button>
+            ) : (
+              <span className="document-detail-project-name">{document.projectName}</span>
+            )}
+          </div>
+        )}
 
         <p className="document-detail-meta">
           Uploaded by {document.uploadedBy} · {document.uploadedDate}
@@ -710,9 +785,9 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
                         {canReview && (
                           <ReviewActions
                             status={decision.status}
-                            onConfirm={() => updateDecisionStatus(decision.id, 'confirmed')}
+                            onConfirm={() => openDecisionReview('confirm', decision.id)}
                             onEdit={() => startEditingDecision(decision.id)}
-                            onReject={() => updateDecisionStatus(decision.id, 'rejected')}
+                            onReject={() => openDecisionReview('reject', decision.id)}
                           />
                         )}
                       </div>
@@ -928,6 +1003,48 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         onInputChange={setReviewReason}
         onClose={closeActionReview}
         onConfirm={confirmActionReview}
+      />
+
+      <ConfirmationModal
+        isOpen={Boolean(pendingDecisionReview)}
+        title={
+          pendingDecisionReview?.type === 'reject'
+            ? 'Reject this decision?'
+            : 'Confirm this decision?'
+        }
+        description={
+          pendingDecisionReview ? (
+            pendingDecisionReview.type === 'reject' ? (
+              <p>
+                “{document.decisions.find((d) => d.id === pendingDecisionReview.id)?.text}”
+                will be marked <strong>Rejected</strong>. It stays visible in the
+                document history but not as a confirmed decision.
+              </p>
+            ) : (
+              <p>
+                “{document.decisions.find((d) => d.id === pendingDecisionReview.id)?.text}”
+                will be marked a <strong>Confirmed</strong> decision for this project.
+              </p>
+            )
+          ) : null
+        }
+        confirmLabel={
+          pendingDecisionReview?.type === 'reject' ? 'Reject decision' : 'Confirm decision'
+        }
+        cancelLabel="Back"
+        tone={pendingDecisionReview?.type === 'reject' ? 'danger' : 'default'}
+        inputLabel={
+          pendingDecisionReview?.type === 'reject' ? 'Reason (optional)' : undefined
+        }
+        inputPlaceholder={
+          pendingDecisionReview?.type === 'reject'
+            ? 'Not an actual decision...'
+            : undefined
+        }
+        inputValue={decisionReason}
+        onInputChange={setDecisionReason}
+        onClose={closeDecisionReview}
+        onConfirm={confirmDecisionReview}
       />
 
       <TaskEditModal

@@ -104,6 +104,30 @@
   background: rgba(185, 151, 22, 0.18);
 }
 
+.dashboard-stat-badge--admin {
+  color: #9a6b2f;
+  background: rgba(199, 128, 32, 0.16);
+}
+
+/* Two review badges (Admin + Manager) sit together, top-right. */
+.dashboard-stat-badges {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.dashboard-stat-badges .dashboard-stat-badge {
+  position: static;
+  top: auto;
+  right: auto;
+}
+
+.dashboard-stat-card--yellow .dashboard-stat-title {
+  padding-right: 150px;
+}
+
 .dashboard-stat-card--dark {
   background: #24211c;
   border-color: #24211c;
@@ -385,6 +409,45 @@
 
 .dashboard-risk-indicator--low {
   background: #79a96a;
+}
+
+/* Clickable affordances */
+
+.dashboard-stat-card--clickable {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.dashboard-stat-card--clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(60, 50, 30, 0.12);
+}
+
+.dashboard-stat-card--clickable:focus-visible {
+  outline: 2px solid #d8a72a;
+  outline-offset: 2px;
+}
+
+.dashboard-risk-item--clickable,
+.dashboard-deadline-row--clickable {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.dashboard-risk-item--clickable:hover .dashboard-risk-heading > span:first-child,
+.dashboard-deadline-row--clickable:hover {
+  color: #1f1b16;
+}
+
+.dashboard-risk-item--clickable:focus-visible,
+.dashboard-deadline-row--clickable:focus-visible {
+  outline: 2px solid #d8a72a;
+  outline-offset: 2px;
+}
+
+.dashboard-risk-empty {
+  color: #9e978b;
+  font-size: 13px;
 }
 
 /* Deadlines */

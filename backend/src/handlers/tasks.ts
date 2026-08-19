@@ -125,11 +125,22 @@ export const getAllTasks = async (req: Request, res: Response) => {
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
     `;
 
+    // Non-admins see tasks in their projects, but DRAFT tasks are AI suggestions
+    // that viewers must never see (spec: "Draft tasks must not appear in
+    // viewer-facing task lists"). Show drafts only from projects where the user
+    // is a manager or contributor. Admins see everything.
     const sql = isAdmin
       ? `${base} ORDER BY a.created_at DESC`
       : `${base}
          WHERE a.project_id IN (
            SELECT project_id FROM project_members WHERE user_id = $1
+         )
+         AND (
+           a.status <> 'draft'
+           OR a.project_id IN (
+             SELECT project_id FROM project_members
+             WHERE user_id = $1 AND project_role IN ('manager', 'contributor')
+           )
          )
          ORDER BY a.created_at DESC`;
 
@@ -323,7 +334,7 @@ export const getTaskDetail = async (req: Request, res: Response) => {
 export const updateTask = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    const { task_title, description, status, assigned_to_user_id, deadline, risk_level, completion_note, cancel_reason } = req.body;
+    const { task_title, description, status, assigned_to_user_id, deadline, risk_level, completion_note, cancel_reason, source_excerpt, project_id } = req.body;
 
     if (!req.user) {
       return res.status(401).json({
@@ -356,7 +367,10 @@ export const updateTask = async (req: Request, res: Response) => {
     const isManager = accessResult.rows.length > 0 && accessResult.rows[0].project_role === 'manager';
     const isAssignee = task.assigned_to_user_id === req.user.id;
 
-    // Contributors can only update their own tasks and move from Confirmed to In Progress
+    // Contributors may only advance their OWN assigned tasks through the
+    // lifecycle (Confirmed -> In Progress -> Completed) and add progress/
+    // completion notes. They cannot reassign, re-deadline, re-risk, rename,
+    // re-describe, or cancel tasks (spec: "A Contributor cannot ...").
     if (!isAdmin && !isManager) {
       if (!isAssignee) {
         return res.status(403).json({
@@ -364,11 +378,43 @@ export const updateTask = async (req: Request, res: Response) => {
           error: 'You can only update your assigned tasks',
         });
       }
-      // Contributors can only change status and add progress notes
       if (status && status !== 'in_progress' && status !== 'completed') {
         return res.status(403).json({
           success: false,
           error: 'Contributors can only move tasks to In Progress or mark as Completed',
+        });
+      }
+      // Reject any attempt to edit fields a contributor is not permitted to change.
+      const forbidden: string[] = [];
+      if (assigned_to_user_id !== undefined) forbidden.push('owner');
+      if (deadline !== undefined) forbidden.push('deadline');
+      if (risk_level !== undefined) forbidden.push('risk level');
+      if (task_title !== undefined) forbidden.push('title');
+      if (description !== undefined) forbidden.push('description');
+      if (source_excerpt !== undefined) forbidden.push('source context');
+      if (project_id !== undefined) forbidden.push('project');
+      if (forbidden.length > 0) {
+        return res.status(403).json({
+          success: false,
+          error: `Contributors cannot change the ${forbidden.join(', ')} of a task`,
+        });
+      }
+    }
+
+    // Reassigning a task to a different project (a manager/admin reviewer edit).
+    // A non-admin manager may only MOVE a task INTO a project they also manage —
+    // they must not push work into a project they don't control.
+    const isProjectChange =
+      project_id !== undefined && Number(project_id) !== Number(task.project_id);
+    if (isProjectChange && !isAdmin) {
+      const destResult = await query(
+        `SELECT project_role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+        [project_id, req.user.id]
+      );
+      if (destResult.rows[0]?.project_role !== 'manager') {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only move a task to a project you manage',
         });
       }
     }
@@ -406,6 +452,18 @@ export const updateTask = async (req: Request, res: Response) => {
     if (risk_level !== undefined) {
       updates.push(`risk_level = $${paramCount}`);
       values.push(risk_level);
+      paramCount++;
+    }
+    // Reviewers (admin/manager) may correct the AI's source context/excerpt.
+    if (source_excerpt !== undefined) {
+      updates.push(`source_excerpt = $${paramCount}`);
+      values.push(source_excerpt || null);
+      paramCount++;
+    }
+    // Reviewers may reassign the task's project (destination-auth checked above).
+    if (isProjectChange) {
+      updates.push(`project_id = $${paramCount}`);
+      values.push(project_id);
       paramCount++;
     }
     if (status === 'completed') {
@@ -447,12 +505,20 @@ export const updateTask = async (req: Request, res: Response) => {
       values
     );
 
-    // Record status change if status changed
+    // Record status change if status changed, carrying the relevant note into
+    // history (completion note on completion, cancel reason on cancellation) so
+    // the audit trail keeps the "optional note" for the transition.
     if (status && status !== previousStatus) {
+      const changeNote =
+        status === 'completed'
+          ? completion_note || null
+          : status === 'cancelled'
+            ? cancel_reason || null
+            : null;
       await query(
-        `INSERT INTO task_status_history (task_id, previous_status, new_status, changed_by)
-         VALUES ($1, $2, $3, $4)`,
-        [taskId, previousStatus, status, req.user.id]
+        `INSERT INTO task_status_history (task_id, previous_status, new_status, changed_by, change_note)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [taskId, previousStatus, status, req.user.id, changeNote]
       );
     }
 

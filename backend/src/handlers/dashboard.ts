@@ -84,10 +84,15 @@ export const getDashboard = async (req: Request, res: Response) => {
     `;
     const draftParams = [...projectIds];
 
-    // Contributors only see tasks in their assigned projects
+    // Draft AI outputs are visible to contributors and managers, but NOT to
+    // viewers. Restrict drafts to projects where this user is a manager or
+    // contributor (a user may be a viewer in some projects and a contributor in
+    // others). Admins see all drafts.
     if (!isAdmin) {
       draftTasksQuery += ` AND a.project_id IN (
-        SELECT project_id FROM project_members WHERE user_id = $${projectIds.length + 1}
+        SELECT project_id FROM project_members
+        WHERE user_id = $${projectIds.length + 1}
+          AND project_role IN ('manager', 'contributor')
       )`;
       draftParams.push(userId);
     }

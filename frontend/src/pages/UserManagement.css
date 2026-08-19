@@ -361,14 +361,51 @@
   outline: none;
 }
 
+/* Themed dropdowns: custom chevron in the theme's muted brown (matches the
+   Upload Center selects). */
 .user-management-field select {
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a7f63' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 16px 16px;
+}
+
+.user-management-field select:hover {
+  border-color: #cdbf9c;
 }
 
 .user-management-field input:focus,
 .user-management-field select:focus {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(243, 206, 75, 0.13);
+}
+
+/* Info note shown under the system-role select (e.g. for admins). */
+.user-management-role-hint {
+  margin: 14px 0 0;
+  padding: 11px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid #ece5d8;
+  border-radius: 10px;
+  background: #faf7f1;
+  color: #7a7264;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.user-management-role-hint::before {
+  content: 'ℹ';
+  flex-shrink: 0;
+  margin-top: -1px;
+  color: #b98f1c;
+  font-weight: 700;
 }
 
 .user-management-role-options {
@@ -466,12 +503,24 @@
 
 .user-management-project-row select {
   flex-shrink: 0;
-  padding: 6px 8px;
+  padding: 6px 28px 6px 10px;
   border: 1px solid #e6dfd4;
   border-radius: 8px;
-  background: #faf7f1;
+  background-color: #faf7f1;
   color: #33302b;
   font-size: 12px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a7f63' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 13px 13px;
+}
+
+.user-management-project-row select:hover {
+  border-color: #cdbf9c;
 }
 
 .user-management-form-error {
@@ -566,4 +615,52 @@
   color: #4b453c;
   font-size: 12px;
   font-weight: 600;
+}
+
+/* Invite-created modal (link-shown mode) */
+.user-management-invite-copy {
+  margin: 4px 0 14px;
+  color: #5a554c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.user-management-invite-link {
+  display: flex;
+  gap: 8px;
+}
+
+.user-management-invite-link input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #ddd5c7;
+  border-radius: 10px;
+  background: #faf7f1;
+  color: #33302b;
+  font-size: 12px;
+}
+
+.user-management-invite-link button {
+  flex-shrink: 0;
+  padding: 0 18px;
+  border: 1px solid var(--gold);
+  border-radius: 10px;
+  background: var(--gold);
+  color: #2d2923;
+  font: 700 13px/1 var(--sans);
+  cursor: pointer;
+}
+
+.user-management-invite-note {
+  margin: 12px 0 0;
+  color: #a39c8f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.user-management-status--pending {
+  color: #9a6b12;
+  background: #fbf0d6;
 }

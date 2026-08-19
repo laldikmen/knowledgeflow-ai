@@ -6,8 +6,23 @@ const OFFICE_EXTENSIONS = ['pdf', 'docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods'];
 // Plain-text formats we can read straight from the buffer (meeting transcripts, etc.).
 const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'log', 'json', 'vtt', 'srt'];
 
+// Everything we can actually extract text from.
+export const SUPPORTED_EXTENSIONS = [...OFFICE_EXTENSIONS, ...TEXT_EXTENSIONS];
+
 const extensionOf = (fileName: string): string =>
   (fileName.split('.').pop() || '').toLowerCase();
+
+/**
+ * Can we extract text from this file? Used to reject unsupported uploads up
+ * front, so a file never silently lands with no analysable text.
+ */
+export function isSupportedFile(fileName: string, mimeType?: string): boolean {
+  const ext = extensionOf(fileName);
+  if (SUPPORTED_EXTENSIONS.includes(ext)) return true;
+  // Allow any text/* payload even with an unusual extension.
+  if (mimeType && mimeType.startsWith('text/')) return true;
+  return false;
+}
 
 /**
  * Extract plain text from an uploaded file buffer.

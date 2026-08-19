@@ -121,6 +121,11 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Subtle panel so the columns read as distinct lanes on the board. */
+  padding: 12px 11px;
+  background: rgba(122, 104, 66, 0.045);
+  border: 1px solid #e8e1d3;
+  border-radius: 14px;
 }
 
 .tracker-column-header {
@@ -129,7 +134,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 2px;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid #e5ddcd;
 }
 
 .tracker-column-title-wrap {
@@ -141,10 +147,11 @@
 
 .tracker-column-header h2 {
   margin: 0;
-  color: #6f695e;
+  color: #423d34;
   font-size: 14px;
   line-height: 1.2;
-  font-weight: 600;
+  font-weight: 800;
+  letter-spacing: 0.005em;
   white-space: nowrap;
 }
 
@@ -205,8 +212,9 @@
 
 .tracker-task-card--overdue {
   padding-top: 48px;
-  background: #fff6f1;
-  border-color: #efc9bd;
+  /* A more saturated (less transparent) red than before. */
+  background: #fbe4db;
+  border-color: #e39d86;
 }
 
 .tracker-overdue-label {
@@ -531,26 +539,41 @@
   outline-offset: -2px;
 }
 
-/* At-risk task highlight (leading-indicator risk model) */
-.tracker-task-card--at-risk {
-  border-color: #e0a83a;
-  box-shadow: 0 0 0 1px rgba(224, 168, 58, 0.35);
-}
-.tracker-at-risk-label {
+/* Header actions: create button + view toggle sit together, top-right. */
+.tracker-header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #9a6b12;
-  background: #fbf0d6;
-  border-radius: 999px;
-  padding: 3px 9px;
-  margin-bottom: 8px;
+  gap: 12px;
 }
-.tracker-at-risk-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #e0a83a;
+
+.tracker-create-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px 0 13px;
+  border: 1px solid #e0c464;
+  border-radius: 10px;
+  background: var(--gold, #f3ce4b);
+  color: #3a2f10;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.12s ease;
+}
+
+.tracker-create-button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.tracker-create-button:focus-visible {
+  outline: 2px solid #b98f1c;
+  outline-offset: 2px;
+}
+
+.tracker-create-icon {
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 700;
 }

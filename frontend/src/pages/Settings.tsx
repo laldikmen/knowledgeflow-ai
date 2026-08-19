@@ -3,12 +3,7 @@ import client from '../api/client';
 import { Avatar } from '../components/Avatar';
 import './Settings.css';
 
-type SettingsSection =
-  | 'profile'
-  | 'notifications'
-  | 'appearance'
-  | 'security'
-  | 'account';
+type SettingsSection = 'profile' | 'appearance' | 'security' | 'account';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
@@ -16,19 +11,6 @@ interface ProjectMembership {
   projectName: string;
   department: string;
   role: string;
-}
-
-interface NotificationPreferences {
-  taskAssigned: boolean;
-  deadlineApproaching: boolean;
-  taskOverdue: boolean;
-  taskStatusChanged: boolean;
-  documentProcessed: boolean;
-  documentFailed: boolean;
-  projectActivity: boolean;
-  aiReviewRequired: boolean;
-  draftTaskReview: boolean;
-  highRiskProject: boolean;
 }
 
 interface SettingsProps {
@@ -42,30 +24,12 @@ interface SettingsProps {
   onLogout: () => void;
 }
 
-const DEFAULT_NOTIFICATIONS: NotificationPreferences = {
-  taskAssigned: true,
-  deadlineApproaching: true,
-  taskOverdue: true,
-  taskStatusChanged: true,
-  documentProcessed: true,
-  documentFailed: true,
-  projectActivity: false,
-  aiReviewRequired: true,
-  draftTaskReview: true,
-  highRiskProject: true,
-};
-
 const NAV_ITEMS: Array<{
   id: SettingsSection;
   label: string;
   description: string;
 }> = [
   { id: 'profile', label: 'Profile', description: 'Personal information' },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    description: 'Alerts and updates',
-  },
   {
     id: 'appearance',
     label: 'Appearance',
@@ -90,13 +54,6 @@ const isAdministrator = (role: string) =>
     normaliseRole(role),
   );
 
-const isManagerOrAdministrator = (role: string) =>
-  isAdministrator(role) ||
-  ['project manager', 'manager', 'department manager'].includes(
-    normaliseRole(role),
-  );
-
-
 const initialsFromName = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
 
@@ -105,40 +62,6 @@ const initialsFromName = (name: string) => {
 
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
-
-const getNotificationStorageKey = (email: string) =>
-  `knowledgeflow-notifications:${email.toLowerCase()}`;
-
-const readStoredNotifications = (email: string): NotificationPreferences => {
-  try {
-    const stored = localStorage.getItem(getNotificationStorageKey(email));
-    if (!stored) return DEFAULT_NOTIFICATIONS;
-
-    return {
-      ...DEFAULT_NOTIFICATIONS,
-      ...(JSON.parse(stored) as Partial<NotificationPreferences>),
-    };
-  } catch {
-    return DEFAULT_NOTIFICATIONS;
-  }
-};
-
-const Toggle: React.FC<{
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-}> = ({ checked, onChange, label }) => (
-  <button
-    type="button"
-    className={`settings-toggle ${checked ? 'settings-toggle--on' : ''}`}
-    role="switch"
-    aria-checked={checked}
-    aria-label={label}
-    onClick={onChange}
-  >
-    <span />
-  </button>
-);
 
 export const Settings: React.FC<SettingsProps> = ({
   userName,
@@ -154,20 +77,10 @@ export const Settings: React.FC<SettingsProps> = ({
     useState<SettingsSection>('profile');
   const [fullName, setFullName] = useState(userName);
   const [profileMessage, setProfileMessage] = useState('');
-  const [notifications, setNotifications] =
-    useState<NotificationPreferences>(() =>
-      readStoredNotifications(userEmail),
-    );
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
   const [securityMessage, setSecurityMessage] = useState('');
+  const [resetLink, setResetLink] = useState('');
+  const [isGeneratingReset, setIsGeneratingReset] = useState(false);
   const [memberships, setMemberships] = useState<ProjectMembership[]>([]);
-
-  const showReviewerNotifications =
-    isManagerOrAdministrator(userRole);
 
   useEffect(() => {
     const fetchMemberships = async () => {
@@ -191,33 +104,6 @@ export const Settings: React.FC<SettingsProps> = ({
     setFullName(userName);
   }, [userName]);
 
-  useEffect(() => {
-    localStorage.setItem(
-      getNotificationStorageKey(userEmail),
-      JSON.stringify(notifications),
-    );
-  }, [notifications, userEmail]);
-
-  useEffect(() => {
-    if (!isPasswordModalOpen) return undefined;
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsPasswordModalOpen(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [isPasswordModalOpen]);
-
-  const updateNotification = (key: keyof NotificationPreferences) => {
-    setNotifications((current) => ({
-      ...current,
-      [key]: !current[key],
-    }));
-  };
-
   const handleProfileSave = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmedName = fullName.trim();
@@ -231,37 +117,25 @@ export const Settings: React.FC<SettingsProps> = ({
     setProfileMessage('Profile changes saved.');
   };
 
-  const openPasswordModal = () => {
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordError('');
-    setIsPasswordModalOpen(true);
-  };
-
-  const handlePasswordChange = (event: React.FormEvent) => {
-    event.preventDefault();
-    setPasswordError('');
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError('Complete all password fields.');
-      return;
+  // Aligns with the token-based flow: generate a one-time reset link the user
+  // opens to set a new password. In link-shown mode the link is returned here;
+  // in production it would be emailed.
+  const handleGenerateResetLink = async () => {
+    setSecurityMessage('');
+    setResetLink('');
+    setIsGeneratingReset(true);
+    try {
+      const res = await client.post('/auth/forgot-password', { email: userEmail });
+      if (res.data?.reset_link) {
+        setResetLink(res.data.reset_link);
+      } else {
+        setSecurityMessage(res.data?.message || 'A reset link has been generated.');
+      }
+    } catch {
+      setSecurityMessage('Could not generate a reset link. Please try again.');
+    } finally {
+      setIsGeneratingReset(false);
     }
-
-    if (newPassword.length < 8) {
-      setPasswordError('The new password must contain at least 8 characters.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('The new passwords do not match.');
-      return;
-    }
-
-    setIsPasswordModalOpen(false);
-    setSecurityMessage(
-      'Password changed successfully.',
-    );
   };
 
   const renderProfile = () => (
@@ -337,103 +211,6 @@ export const Settings: React.FC<SettingsProps> = ({
           </button>
         </div>
       </form>
-    </section>
-  );
-
-  const renderNotificationRow = (
-    key: keyof NotificationPreferences,
-    title: string,
-    description: string,
-  ) => (
-    <div className="settings-notification-row" key={key}>
-      <div>
-        <strong>{title}</strong>
-        <p>{description}</p>
-      </div>
-      <Toggle
-        checked={notifications[key]}
-        onChange={() => updateNotification(key)}
-        label={`${title} notifications`}
-      />
-    </div>
-  );
-
-  const renderNotifications = () => (
-    <section
-      className="settings-panel"
-      aria-labelledby="settings-notifications-title"
-    >
-      <div className="settings-panel-heading">
-        <div>
-          <h2 id="settings-notifications-title">Notifications</h2>
-          <p>Choose which workspace events should notify you.</p>
-        </div>
-        <span className="settings-auto-save">Saved automatically</span>
-      </div>
-
-      <div className="settings-notification-group">
-        <h3>Tasks</h3>
-        {renderNotificationRow(
-          'taskAssigned',
-          'Task assigned to me',
-          'Receive an alert when you become responsible for a task.',
-        )}
-        {renderNotificationRow(
-          'deadlineApproaching',
-          'Task deadline approaching',
-          'Receive a reminder before an active task is due.',
-        )}
-        {renderNotificationRow(
-          'taskOverdue',
-          'Task becomes overdue',
-          'Receive an alert when an active task passes its deadline.',
-        )}
-        {renderNotificationRow(
-          'taskStatusChanged',
-          'Task status changes',
-          'Receive updates when a task you follow changes state.',
-        )}
-      </div>
-
-      <div className="settings-notification-group">
-        <h3>Documents and projects</h3>
-        {renderNotificationRow(
-          'documentProcessed',
-          'Document processing completed',
-          'Receive an alert when AI analysis finishes successfully.',
-        )}
-        {renderNotificationRow(
-          'documentFailed',
-          'Document processing failed',
-          'Receive an alert when a document needs attention or retrying.',
-        )}
-        {renderNotificationRow(
-          'projectActivity',
-          'New project activity',
-          'Receive a summary of meaningful activity in accessible projects.',
-        )}
-      </div>
-
-      {showReviewerNotifications && (
-        <div className="settings-notification-group">
-          <h3>Manager and administrator alerts</h3>
-          {renderNotificationRow(
-            'aiReviewRequired',
-            'AI-generated content awaiting review',
-            'Receive an alert when summaries or decisions require approval.',
-          )}
-          {renderNotificationRow(
-            'draftTaskReview',
-            'Draft tasks awaiting confirmation',
-            'Receive an alert when extracted action items need review.',
-          )}
-          {renderNotificationRow(
-            'highRiskProject',
-            'High-risk project alerts',
-            'Receive an alert when accessible project risk becomes high.',
-          )}
-        </div>
-      )}
     </section>
   );
 
@@ -526,16 +303,33 @@ export const Settings: React.FC<SettingsProps> = ({
         <div className="settings-security-icon" aria-hidden="true">••</div>
         <div>
           <strong>Password</strong>
-          <p>Update the password used for your KnowledgeFlow account.</p>
+          <p>
+            We'll generate a secure link for you to set a new password — the same
+            way invites and resets work.
+          </p>
         </div>
         <button
           type="button"
           className="settings-button settings-button--secondary"
-          onClick={openPasswordModal}
+          onClick={handleGenerateResetLink}
+          disabled={isGeneratingReset}
         >
-          Change password
+          {isGeneratingReset ? 'Generating…' : 'Change password'}
         </button>
       </div>
+
+      {resetLink && (
+        <div className="settings-reset-link">
+          <p>
+            Open this link to set a new password (valid for 1 hour). In production
+            this link is emailed to you automatically.
+          </p>
+          <div className="settings-reset-link-row">
+            <input readOnly value={resetLink} onFocus={(e) => e.target.select()} />
+            <a href={resetLink}>Open</a>
+          </div>
+        </div>
+      )}
 
       <div className="settings-security-card">
         <div className="settings-security-icon" aria-hidden="true">◉</div>
@@ -645,7 +439,6 @@ export const Settings: React.FC<SettingsProps> = ({
   );
 
   const renderActiveSection = () => {
-    if (activeSection === 'notifications') return renderNotifications();
     if (activeSection === 'appearance') return renderAppearance();
     if (activeSection === 'security') return renderSecurity();
     if (activeSection === 'account') return renderAccount();
@@ -684,92 +477,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
         <div className="settings-content">{renderActiveSection()}</div>
       </div>
-
-      {isPasswordModalOpen && (
-        <div
-          className="settings-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setIsPasswordModalOpen(false);
-            }
-          }}
-        >
-          <form
-            className="settings-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="settings-password-title"
-            onSubmit={handlePasswordChange}
-          >
-            <div className="settings-modal-heading">
-              <div>
-                <h2 id="settings-password-title">Change password</h2>
-                <p>This is a frontend-only password-change preview.</p>
-              </div>
-              <button
-                type="button"
-                className="settings-modal-close"
-                aria-label="Close password dialog"
-                onClick={() => setIsPasswordModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            {passwordError && (
-              <div className="settings-password-error">{passwordError}</div>
-            )}
-
-            <label className="settings-field">
-              <span>Current password</span>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                autoComplete="current-password"
-                autoFocus
-              />
-            </label>
-
-            <label className="settings-field">
-              <span>New password</span>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                autoComplete="new-password"
-              />
-            </label>
-
-            <label className="settings-field">
-              <span>Confirm new password</span>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                autoComplete="new-password"
-              />
-            </label>
-
-            <div className="settings-modal-actions">
-              <button
-                type="button"
-                className="settings-button settings-button--secondary"
-                onClick={() => setIsPasswordModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="settings-button settings-button--primary"
-              >
-                Update password
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </section>
   );
 };

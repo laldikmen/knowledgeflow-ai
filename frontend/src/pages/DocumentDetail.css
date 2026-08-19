@@ -105,6 +105,44 @@
   line-height: 1.4;
 }
 
+.document-detail-project-box {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid #e9e3d8;
+  border-radius: 10px;
+  background: #faf7f1;
+}
+
+.document-detail-project-label {
+  color: #a19a8e;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.document-detail-project-name {
+  color: #29261f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.document-detail-project-name--link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: #a5741c;
+  text-decoration: none;
+}
+
+.document-detail-project-name--link:hover {
+  text-decoration: underline;
+}
+
 .document-detail-layout {
   display: grid;
   grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);

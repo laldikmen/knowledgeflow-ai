@@ -9,6 +9,7 @@ type DocumentStatus = 'processed' | 'processing' | 'uploaded' | 'failed';
 interface DocumentItem {
   id: number;
   name: string;
+  projectName: string;
   type: DocumentType;
   uploadedBy: string;
   uploadedDate: string;
@@ -91,6 +92,7 @@ export const Documents: React.FC = () => {
         const documents = response.data.map((doc: any) => ({
           id: doc.id,
           name: doc.title || doc.name,
+          projectName: doc.project_name || '—',
           type: doc.document_type || 'pdf',
           uploadedBy: doc.uploaded_by || doc.created_by,
           uploadedDate: new Date(doc.created_at).toLocaleDateString('en-US', {
@@ -120,6 +122,7 @@ export const Documents: React.FC = () => {
       const matchesType = filterType === 'all' || document.type === filterType;
       const searchableText = [
         document.name,
+        document.projectName,
         getTypeLabel(document.type),
         document.uploadedBy,
         document.status,
@@ -182,6 +185,7 @@ export const Documents: React.FC = () => {
       <div className="documents-table" role="table" aria-label="Documents and meetings">
         <div className="documents-table-header" role="row">
           <div role="columnheader">Name</div>
+          <div role="columnheader">Project</div>
           <div role="columnheader">Type</div>
           <div role="columnheader">Uploaded by</div>
           <div role="columnheader">Date</div>
@@ -219,6 +223,10 @@ export const Documents: React.FC = () => {
                         {document.details}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="document-table-cell" role="cell">
+                    <span className="document-table-project">{document.projectName}</span>
                   </div>
 
                   <div className="document-table-cell" role="cell">

@@ -110,15 +110,6 @@ export const getAllTasks = async (req: Request, res: Response) => {
           THEN (CURRENT_DATE - a.deadline)
           ELSE 0
         END AS overdue_days,
-        (
-          a.status IN ('confirmed', 'in_progress')
-          AND (
-            a.risk_level = 'high'
-            OR (a.deadline IS NOT NULL AND a.deadline < CURRENT_DATE)
-            OR (a.status = 'confirmed' AND a.deadline IS NOT NULL
-                AND a.deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days')
-          )
-        ) AS is_at_risk,
         a.created_at
       FROM action_items a
       JOIN projects p ON a.project_id = p.id
@@ -318,6 +309,37 @@ export const getTaskDetail = async (req: Request, res: Response) => {
 
     task.status_history = historyResult.rows;
 
+    // Progress / completion notes (persisted in task_notes).
+    const notesResult = await query(
+      `SELECT n.id, n.note_text, n.note_type, n.created_at,
+              u.name AS author
+       FROM task_notes n
+       LEFT JOIN users u ON n.author_id = u.id
+       WHERE n.task_id = $1
+       ORDER BY n.created_at ASC`,
+      [taskId]
+    );
+    task.notes = notesResult.rows.map((r: any) => ({
+      id: r.id,
+      author: r.author || 'Someone',
+      text: r.note_text,
+      type: r.note_type,
+      created_at: r.created_at,
+    }));
+
+    // Manual tasks (not AI-extracted) have no source document. Surface who
+    // created it — the person on the earliest status-history entry (the row that
+    // has no previous status, i.e. the task's creation).
+    if (!task.created_by_ai) {
+      const creationRow = [...historyResult.rows]
+        .reverse()
+        .find((r: any) => !r.previous_status);
+      task.created_manually = true;
+      task.created_by_name = creationRow?.changed_by_name || null;
+    } else {
+      task.created_manually = false;
+    }
+
     return res.json({
       success: true,
       data: task,
@@ -334,7 +356,7 @@ export const getTaskDetail = async (req: Request, res: Response) => {
 export const updateTask = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    const { task_title, description, status, assigned_to_user_id, deadline, risk_level, completion_note, cancel_reason, source_excerpt, project_id } = req.body;
+    const { task_title, description, status, assigned_to_user_id, deadline, risk_level, completion_note, cancel_reason, source_excerpt, project_id, change_note } = req.body;
 
     if (!req.user) {
       return res.status(401).json({
@@ -509,12 +531,16 @@ export const updateTask = async (req: Request, res: Response) => {
     // history (completion note on completion, cancel reason on cancellation) so
     // the audit trail keeps the "optional note" for the transition.
     if (status && status !== previousStatus) {
+      // Prefer an explicit note from the lifecycle modal; fall back to the
+      // completion note / cancel reason for those transitions.
       const changeNote =
-        status === 'completed'
-          ? completion_note || null
+        change_note ||
+        (status === 'completed'
+          ? completion_note
           : status === 'cancelled'
-            ? cancel_reason || null
-            : null;
+            ? cancel_reason
+            : null) ||
+        null;
       await query(
         `INSERT INTO task_status_history (task_id, previous_status, new_status, changed_by, change_note)
          VALUES ($1, $2, $3, $4, $5)`,
@@ -664,5 +690,61 @@ export const assignTask = async (req: Request, res: Response) => {
       success: false,
       error: 'Internal server error',
     });
+  }
+};
+
+// Add a progress / completion note to a task (assignee, project manager, or
+// admin). Persisted in task_notes and shown in the task's Progress notes.
+export const addTaskNote = async (req: Request, res: Response) => {
+  try {
+    const { taskId } = req.params;
+    const { note, note_type } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (!note || !String(note).trim()) {
+      return res.status(400).json({ success: false, error: 'Note text is required' });
+    }
+
+    const taskResult = await query(
+      'SELECT project_id, assigned_to_user_id FROM action_items WHERE id = $1',
+      [taskId]
+    );
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+    const task = taskResult.rows[0];
+
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [task.project_id, req.user.id]
+    );
+    const isAdmin = req.user.system_role === 'admin';
+    const isManager = accessResult.rows[0]?.project_role === 'manager';
+    const isAssignee = task.assigned_to_user_id === req.user.id;
+    if (!isAdmin && !isManager && !isAssignee) {
+      return res.status(403).json({
+        success: false,
+        error: 'You can only add notes to tasks you own or manage',
+      });
+    }
+
+    const result = await query(
+      `INSERT INTO task_notes (task_id, author_id, note_text, note_type)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, created_at`,
+      [taskId, req.user.id, String(note).trim(), note_type || 'progress']
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Note added',
+    });
+  } catch (error) {
+    console.error('Add task note error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

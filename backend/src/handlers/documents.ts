@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
 import { randomUUID } from 'crypto';
-import { extractText } from '../utils/textExtraction';
+import { extractText, isSupportedFile } from '../utils/textExtraction';
 
 const s3 = new AWS.S3({
   region: process.env.S3_REGION || 'us-east-1',
@@ -62,6 +62,16 @@ export const uploadDocument = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         error: 'File size exceeds 50MB limit',
+      });
+    }
+
+    // Reject file types we can't extract text from, up front — otherwise the
+    // document would upload but silently have no analysable content.
+    if (!isSupportedFile(req.file.originalname, req.file.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Unsupported file type. Upload a PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx), or a text/transcript file (.txt, .md, .csv, .vtt, .srt).',
       });
     }
 
@@ -347,6 +357,52 @@ export const getDocumentDetail = async (req: Request, res: Response) => {
         confidence: row.ai_confidence,
         project_name: row.project_name,
       }));
+
+    // Source preview: the verbatim sentences the AI traced decisions/action
+    // items back to, so a reviewer can see them in context. If there are none
+    // (e.g. not yet analysed), fall back to a plain excerpt of the document's
+    // extracted text so the panel still shows real content.
+    document.source_title = 'Source';
+    let excerptId = 1;
+    const sourceExcerpts: any[] = [];
+    for (const decision of document.decisions) {
+      if (decision.source && String(decision.source).trim()) {
+        sourceExcerpts.push({
+          id: excerptId++,
+          label: 'Decision source',
+          text: String(decision.source).trim(),
+          kind: 'decision',
+        });
+      }
+    }
+    for (const item of document.action_items) {
+      if (item.source && String(item.source).trim()) {
+        sourceExcerpts.push({
+          id: excerptId++,
+          label: 'Action item source',
+          text: String(item.source).trim(),
+          kind: 'action',
+        });
+      }
+    }
+    if (sourceExcerpts.length === 0) {
+      const textResult = await query(
+        `SELECT extracted_text FROM document_texts WHERE document_id = $1`,
+        [documentId]
+      );
+      const extracted = textResult.rows[0]?.extracted_text;
+      if (extracted && String(extracted).trim()) {
+        const full = String(extracted).trim();
+        const preview = full.slice(0, 2000);
+        sourceExcerpts.push({
+          id: excerptId++,
+          label: 'Document text',
+          text: full.length > 2000 ? `${preview}…` : preview,
+          kind: 'plain',
+        });
+      }
+    }
+    document.source_excerpts = sourceExcerpts;
 
     return res.json({
       success: true,

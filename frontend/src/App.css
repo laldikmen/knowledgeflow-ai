@@ -213,17 +213,42 @@
   padding: var(--sp-md);
   border-radius: var(--radius-md);
   background: var(--accent-bg);
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.sidebar-user:hover {
-  background: rgba(243, 206, 75, 0.15);
 }
 
 .sidebar-user-info {
   flex: 1;
   min-width: 0;
+}
+
+.sidebar-logout {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.sidebar-logout svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar-logout:hover {
+  background: rgba(243, 206, 75, 0.18);
+  color: var(--text);
+}
+
+.sidebar-logout:focus-visible {
+  outline: 2px solid var(--accent, #d8a72a);
+  outline-offset: 2px;
 }
 
 .sidebar-user-name {
@@ -981,6 +1006,15 @@
   border-color: #75483d;
 }
 
+:root[data-theme='dark'] .tracker-column {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: var(--kf-border-soft);
+}
+
+:root[data-theme='dark'] .tracker-column-header {
+  border-bottom-color: var(--kf-border-soft);
+}
+
 :root[data-theme='dark'] .tracker-task-title,
 :root[data-theme='dark'] .tracker-table td {
   color: var(--text);
@@ -1144,9 +1178,21 @@
 :root[data-theme='dark'] .project-member-controls select,
 :root[data-theme='dark'] .project-member-add-form select,
 :root[data-theme='dark'] .project-member-add-form input {
-  background: var(--kf-surface-raised);
+  /* background-color (not the shorthand) so the select's custom chevron survives. */
+  background-color: var(--kf-surface-raised);
   border-color: #555149;
   color: var(--text);
+}
+
+:root[data-theme='dark'] .project-member-controls select:hover,
+:root[data-theme='dark'] .project-member-add-form select:hover {
+  border-color: #6d675c;
+}
+
+:root[data-theme='dark'] .project-member-controls select option,
+:root[data-theme='dark'] .project-member-add-form select option {
+  color: var(--text);
+  background: var(--kf-surface-raised);
 }
 
 :root[data-theme='dark'] .project-member-remove {
@@ -1500,11 +1546,19 @@
 :root[data-theme='dark'] .kf-chat-workspace-header h1,
 :root[data-theme='dark'] .kf-chat-answer-content > p,
 :root[data-theme='dark'] .kf-chat-answer-content strong,
+:root[data-theme='dark'] .kf-chat-answer-body,
+:root[data-theme='dark'] .kf-chat-answer-body strong,
+:root[data-theme='dark'] .kf-chat-list li,
 :root[data-theme='dark'] .kf-chat-source-card,
 :root[data-theme='dark'] .kf-chat-source-card strong,
 :root[data-theme='dark'] .kf-chat-empty-state h2,
 :root[data-theme='dark'] .kf-chat-composer textarea {
   color: var(--text);
+}
+
+:root[data-theme='dark'] .kf-chat-citation {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
 }
 
 :root[data-theme='dark'] .kf-chat-answer-icon,
@@ -1588,8 +1642,14 @@
 :root[data-theme='dark'] .upload-dropzone,
 :root[data-theme='dark'] .upload-file-row,
 :root[data-theme='dark'] .upload-control {
-  background: var(--kf-surface-soft);
+  /* background-color (not the `background` shorthand) so the select's custom
+     chevron background-image is preserved in dark mode. */
+  background-color: var(--kf-surface-soft);
   border-color: #555149;
+}
+
+:root[data-theme='dark'] select.upload-control:hover {
+  border-color: #6d675c;
 }
 
 :root[data-theme='dark'] .upload-dropzone:hover,

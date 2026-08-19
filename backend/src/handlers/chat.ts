@@ -149,12 +149,29 @@ Rules:
       answer = await callBedrock(context);
     }
 
+    // When the answer is the "not found" message, there is nothing to cite — so
+    // don't attach or store any sources.
+    const answeredFromDocs = answer.trim() !== NO_INFO_MESSAGE;
+    const sources = answeredFromDocs
+      ? relevantDocs.map(doc => ({
+          document_id: doc.id,
+          document_title: doc.title,
+          excerpt: doc.text.substring(0, 200),
+        }))
+      : [];
+
     // Store conversation in chat_messages
     const chatResult = await query(
       `INSERT INTO chat_messages (project_id, user_id, question, answer, sources_json)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, created_at`,
-      [projectId, req.user.id, question, answer, JSON.stringify(relevantDocs.map(d => ({id: d.id, title: d.title})))]
+      [
+        projectId,
+        req.user.id,
+        question,
+        answer,
+        JSON.stringify(sources.map(s => ({ id: s.document_id, title: s.document_title }))),
+      ]
     );
 
     return res.json({
@@ -163,11 +180,7 @@ Rules:
         chat_id: chatResult.rows[0].id,
         question,
         answer,
-        sources: relevantDocs.map(doc => ({
-          document_id: doc.id,
-          document_title: doc.title,
-          excerpt: doc.text.substring(0, 200),
-        })),
+        sources,
         created_at: chatResult.rows[0].created_at,
       },
     });

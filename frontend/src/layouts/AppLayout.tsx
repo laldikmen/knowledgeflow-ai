@@ -1,17 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
+import client from '../api/client';
+
+interface ReviewSummary {
+  canReview: boolean;
+  reviewCount: number;
+  assignedOpenCount: number;
+  projectCount: number;
+}
 
 interface AppLayoutProps {
   children: React.ReactNode;
   userName?: string;
   userRole?: string;
   userInitials?: string;
-  itemsNeedingReview?: {
-    count: number;
-    projects: number;
-  };
   onLogout?: () => void;
   onSearch?: (query: string) => void;
 }
@@ -59,13 +63,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   userName = 'User',
   userRole = 'Viewer',
   userInitials = 'U',
-  itemsNeedingReview = { count: 0, projects: 0 },
   onLogout,
   onSearch,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary | null>(null);
   const isProjectDetail = /^\/projects\/[^/]+\/?$/.test(location.pathname);
   const isDocumentDetail = /^\/documents\/[^/]+\/?$/.test(location.pathname);
   const isTaskDetail = /^\/tasks\/[^/]+\/?$/.test(location.pathname);
@@ -84,15 +88,50 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     return 'dashboard';
   }, [isTaskDetail, location.pathname]);
 
+  // The dashboard greeting subtitle is data-driven: reviewers (admin / project
+  // manager) see how many AI drafts await review; everyone else sees how many
+  // active tasks are assigned to them. Both are "across N accessible projects".
+  useEffect(() => {
+    if (currentPage !== 'dashboard') return;
+    let cancelled = false;
+    client
+      .get('/dashboard')
+      .then((response) => {
+        const s = response.data?.summary || {};
+        if (cancelled) return;
+        setReviewSummary({
+          canReview: Boolean(s.can_review),
+          reviewCount: Number(s.review_count) || 0,
+          assignedOpenCount: Number(s.assigned_open_count) || 0,
+          projectCount: Number(s.accessible_project_count) || 0,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setReviewSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage]);
+
+  const dashboardSubtitle = useMemo(() => {
+    const s = reviewSummary;
+    if (!s) return undefined;
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const projects = plural(s.projectCount, 'project');
+    return s.canReview
+      ? `${plural(s.reviewCount, 'item')} need${s.reviewCount === 1 ? 's' : ''} your review across ${projects}`
+      : `${plural(s.assignedOpenCount, 'task')} waiting for you across ${projects}`;
+  }, [reviewSummary]);
+
   const headerConfig = useMemo<HeaderConfig>(() => {
     if (currentPage === 'dashboard') {
       return {
         title: `${getGreeting()}, ${userName}`,
-        subtitle: `${itemsNeedingReview.count} items need your review across ${itemsNeedingReview.projects} projects`,
-        searchPlaceholder: 'Search knowledge...',
+        subtitle: dashboardSubtitle,
         actionLabel: 'Upload',
         actionIcon: 'plus',
-        showNotifications: true,
+        showNotifications: false,
         onAction: () => navigate('/upload'),
       };
     }
@@ -131,13 +170,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       title: pageTitles[currentPage] ?? 'KnowledgeFlow AI',
       showNotifications: false,
     };
-  }, [
-    currentPage,
-    itemsNeedingReview.count,
-    itemsNeedingReview.projects,
-    navigate,
-    userName,
-  ]);
+  }, [currentPage, dashboardSubtitle, navigate, userName]);
 
   const handleNavigate = (page: string) => {
     const route = pageRoutes[page] || '/dashboard';
@@ -164,6 +197,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     );
 
     onSearch?.(query);
+  };
+
+  // Pressing Enter in the header search. Projects/Documents already filter live
+  // on each keystroke, so submit just keeps the current query in place.
+  const handleSearchSubmit = (query: string) => {
+    handleSearch(query);
   };
 
   const handleLogout = () => {
@@ -207,7 +246,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               actionLabel={headerConfig.actionLabel}
               actionIcon={headerConfig.actionIcon}
               showNotifications={headerConfig.showNotifications}
+              initialQuery={new URLSearchParams(location.search).get('q') ?? ''}
               onSearch={handleSearch}
+              onSearchSubmit={handleSearchSubmit}
               onAction={headerConfig.onAction}
             />
           )}

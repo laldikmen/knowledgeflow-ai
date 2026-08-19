@@ -19,7 +19,7 @@ interface Project {
 }
 
 
-const DEPARTMENTS = ['All departments', 'Software', 'Product', 'People', 'Legal'];
+const ALL_DEPARTMENTS = 'All departments';
 
 const toRole = (role?: string): ProjectRole => {
   if (role === 'contributor') return 'Contributor';
@@ -44,7 +44,7 @@ export const Projects: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [activeDepartment, setActiveDepartment] = useState('All departments');
+  const [activeDepartment, setActiveDepartment] = useState(ALL_DEPARTMENTS);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', department_name: '', description: '' });
@@ -106,15 +106,32 @@ export const Projects: React.FC = () => {
     }
   };
 
-  const filteredProjects = useMemo(() => {
-    if (activeDepartment === 'All departments') {
-      return projects;
-    }
+  // Header search filters the project list by name (live via the ?q= param).
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? '';
 
-    return projects.filter(
-      (project) => project.department === activeDepartment,
-    );
-  }, [activeDepartment, projects]);
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const matchesDepartment =
+        activeDepartment === ALL_DEPARTMENTS ||
+        project.department === activeDepartment;
+      const matchesSearch =
+        !searchQuery || project.name.toLowerCase().includes(searchQuery);
+      return matchesDepartment && matchesSearch;
+    });
+  }, [activeDepartment, projects, searchQuery]);
+
+  // Department filter pills are derived from the actual projects, so a project
+  // created with a brand-new department name automatically gets its own pill.
+  const departments = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        projects
+          .map((project) => project.department)
+          .filter((department) => department && department !== '—'),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+    return [ALL_DEPARTMENTS, ...unique];
+  }, [projects]);
 
   if (isLoading) {
     return <div className="projects">Loading projects...</div>;
@@ -123,7 +140,7 @@ export const Projects: React.FC = () => {
   return (
     <section className="projects">
       <div className="projects-filters" aria-label="Filter projects by department">
-        {DEPARTMENTS.map((department) => (
+        {departments.map((department) => (
           <button
             type="button"
             key={department}

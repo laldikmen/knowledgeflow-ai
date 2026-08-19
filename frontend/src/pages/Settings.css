@@ -963,3 +963,48 @@
     margin-right: 0;
   }
 }
+
+/* Token-based reset link surfaced in the Security tab (link-shown mode). */
+.settings-reset-link {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px dashed #d8c98f;
+  border-radius: 12px;
+  background: #fdf8e8;
+}
+
+.settings-reset-link p {
+  margin: 0 0 10px;
+  color: #7a7060;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-reset-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-reset-link-row input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #e2d9c6;
+  border-radius: 9px;
+  background: #fffdf8;
+  color: #4a453c;
+  font-size: 12px;
+}
+
+.settings-reset-link-row a {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 9px;
+  background: var(--gold);
+  color: #2d2923;
+  font: 700 13px/1 var(--sans);
+  text-decoration: none;
+}

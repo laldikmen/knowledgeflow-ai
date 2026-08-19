@@ -46,6 +46,8 @@ interface TaskDetailData {
   sourceDocument: string;
   sourceReference: string;
   sourceConfidence?: number;
+  createdManually?: boolean;
+  createdByName?: string;
   notes: TaskNote[];
   history: TaskHistoryItem[];
 }
@@ -64,7 +66,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   rejected: 'Rejected',
 };
 
-const normalise = (value: string) => value.trim().toLowerCase();
+const normalise = (value?: string | null) => (value || '').trim().toLowerCase();
 
 const canManageTasks = (role: string) =>
   [
@@ -222,6 +224,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         sourceDocument: data.source_document_title || 'Source Document',
         sourceReference: data.source_excerpt || 'Extracted from source',
         sourceConfidence: data.ai_confidence,
+        createdManually: Boolean(data.created_manually),
+        createdByName: data.created_by_name || undefined,
         notes: data.notes?.map((note: any) => ({
           id: note.id,
           author: note.author,
@@ -323,34 +327,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     setPendingAction(action);
   };
 
-  const addProgressNote = () => {
+  const addProgressNote = async () => {
     const trimmed = noteText.trim();
-    if (!trimmed) return;
+    if (!trimmed || !task) return;
 
-    setTask((current) =>
-      current
-        ? {
-            ...current,
-            notes: [
-              ...current.notes,
-              {
-                id: Date.now(),
-                author: currentUserName,
-                initials:
-                  currentUserName
-                    .split(/\s+/)
-                    .map((part) => part[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase() || 'U',
-                text: trimmed,
-                date: 'Today',
-              },
-            ],
-          }
-        : current,
-    );
-    setNoteText('');
+    try {
+      await client.post(`/tasks/${task.id}/notes`, { note: trimmed });
+      setNoteText('');
+      await loadTask();
+    } catch (error) {
+      console.error('Failed to add note', error);
+    }
   };
 
   const confirmPendingAction = async () => {
@@ -378,7 +365,28 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
           status: statusByAction[pendingAction],
           completion_note: pendingAction === 'complete' ? trimmedNote || undefined : undefined,
           cancel_reason: pendingAction === 'cancel' ? trimmedNote || undefined : undefined,
+          // Records the note against the status change in task history.
+          change_note: trimmedNote || undefined,
         });
+
+        // Also store it as a progress/completion note so it appears in the
+        // Progress notes list (not only in history).
+        if (trimmedNote) {
+          const noteType =
+            pendingAction === 'complete'
+              ? 'completion'
+              : pendingAction === 'cancel'
+                ? 'cancellation'
+                : 'progress';
+          try {
+            await client.post(`/tasks/${task.id}/notes`, {
+              note: trimmedNote,
+              note_type: noteType,
+            });
+          } catch (noteError) {
+            console.error('Failed to record lifecycle note', noteError);
+          }
+        }
       }
 
       await loadTask();
@@ -415,7 +423,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     );
     const projectChanged =
       matchedProject &&
-      values.projectName.trim().toLowerCase() !== task.projectName.trim().toLowerCase();
+      values.projectName.trim().toLowerCase() !== (task.projectName || '').trim().toLowerCase();
 
     try {
       await client.put(`/tasks/${task.id}`, {
@@ -466,27 +474,48 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
             <h2>Description</h2>
             <p>{task.description}</p>
 
-            <button
-              type="button"
-              className="task-detail-source-card"
-              onClick={() =>
-                task.sourceDocumentId
-                  ? navigate(`/documents/${task.sourceDocumentId}`)
-                  : navigate('/documents')
-              }
-            >
-              <span className="task-detail-source-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="7.5" />
-                  <path d="M12 7.5V12l3 2" />
-                </svg>
-              </span>
-              <span className="task-detail-source-copy">
-                <strong>Source: {task.sourceDocument}</strong>
-                <small>{task.sourceReference}</small>
-              </span>
-              <span className="task-detail-source-open">Open →</span>
-            </button>
+            {task.createdManually ? (
+              <div className="task-detail-source-card task-detail-source-card--manual">
+                <span className="task-detail-source-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <circle cx="9" cy="8" r="3" />
+                    <path d="M4 19c.5-3.1 2.2-4.8 5-4.8s4.5 1.7 5 4.8" />
+                  </svg>
+                </span>
+                <span className="task-detail-source-copy">
+                  <strong>
+                    Created manually
+                    {task.createdByName ? ` by ${task.createdByName}` : ''}
+                  </strong>
+                  <small>
+                    This task was created directly, not extracted from a source
+                    document.
+                  </small>
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="task-detail-source-card"
+                onClick={() =>
+                  task.sourceDocumentId
+                    ? navigate(`/documents/${task.sourceDocumentId}`)
+                    : navigate('/documents')
+                }
+              >
+                <span className="task-detail-source-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="7.5" />
+                    <path d="M12 7.5V12l3 2" />
+                  </svg>
+                </span>
+                <span className="task-detail-source-copy">
+                  <strong>Source: {task.sourceDocument}</strong>
+                  <small>{task.sourceReference}</small>
+                </span>
+                <span className="task-detail-source-open">Open →</span>
+              </button>
+            )}
           </article>
 
           <article className="task-detail-card task-detail-notes-card">

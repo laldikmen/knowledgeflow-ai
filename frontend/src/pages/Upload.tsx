@@ -17,6 +17,10 @@ interface UploadFile {
   name: string;
   size: number;
   status: UploadStatus;
+  // Keep the actual File so we can upload it. Reading it back from the hidden
+  // <input> is unreliable — the input is cleared after selection and never
+  // holds drag-and-dropped files.
+  file: File;
 }
 
 const inferDocumentType = (fileName: string): DocumentType => {
@@ -28,7 +32,11 @@ const inferDocumentType = (fileName: string): DocumentType => {
   return 'transcript';
 };
 
-export const Upload: React.FC = () => {
+interface UploadProps {
+  currentUserRole?: string;
+}
+
+export const Upload: React.FC<UploadProps> = ({ currentUserRole = 'Viewer' }) => {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
@@ -37,13 +45,18 @@ export const Upload: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  // null while loading; true/false once we know if the user can upload anywhere.
+  const [canUpload, setCanUpload] = useState<boolean | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = currentUserRole.trim().toLowerCase() === 'admin';
 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         const response = await client.get('/projects');
-        const options = response.data.map((proj: any) => ({
+        const data = response.data || [];
+        const options = data.map((proj: any) => ({
           value: proj.id.toString(),
           label: proj.name,
         }));
@@ -51,14 +64,23 @@ export const Upload: React.FC = () => {
         if (options.length > 0) {
           setProjectId(options[0].value);
         }
+        // A user can upload only if they're an admin or a manager/contributor in
+        // at least one project. Viewers (everywhere) are read-only.
+        const uploadable =
+          isAdmin ||
+          data.some((p: any) =>
+            ['manager', 'contributor'].includes((p.project_role || '').toLowerCase()),
+          );
+        setCanUpload(uploadable);
       } catch (error) {
         console.error('Failed to load projects', error);
         setProjectOptions([]);
+        setCanUpload(isAdmin);
       }
     };
 
     fetchProjects();
-  }, []);
+  }, [isAdmin]);
 
   const handleDrag = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -77,6 +99,7 @@ export const Upload: React.FC = () => {
       name: file.name,
       size: file.size,
       status: 'pending' as UploadStatus,
+      file,
     }));
 
     if (selectedFiles.length === 0) return;
@@ -129,15 +152,14 @@ export const Upload: React.FC = () => {
       currentFiles.map((file) => ({ ...file, status: 'processing' })),
     );
 
-    try {
-      const fileElements = fileInputRef.current?.files;
-      if (!fileElements) {
-        throw new Error('No files selected');
-      }
+    // Snapshot the files being uploaded (from state — the real File objects).
+    const pending = files;
+    let anyFailed = false;
 
-      for (const file of Array.from(fileElements)) {
+    for (const item of pending) {
+      try {
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', item.file);
         formData.append('project_id', projectId);
         formData.append('document_type', documentType);
         formData.append('title', title);
@@ -146,14 +168,11 @@ export const Upload: React.FC = () => {
         }
 
         const uploadResponse = await client.post('/documents/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
 
-        // Trigger AI processing (summary, decisions, action items) on the new
-        // document. Upload has already succeeded, so a processing failure
-        // (e.g. no extractable text) must not fail the upload.
+        // Trigger AI processing on the new document. Upload already succeeded, so
+        // a processing failure (e.g. no extractable text) must not fail the row.
         const documentId = uploadResponse.data?.id;
         if (documentId) {
           try {
@@ -162,18 +181,27 @@ export const Upload: React.FC = () => {
             console.error('AI processing failed (document still uploaded):', processError);
           }
         }
-      }
 
-      setFiles((currentFiles) =>
-        currentFiles.map((file) => ({ ...file, status: 'success' })),
-      );
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setFiles((currentFiles) =>
-        currentFiles.map((file) => ({ ...file, status: 'error' })),
-      );
-    } finally {
-      setIsProcessing(false);
+        setFiles((currentFiles) =>
+          currentFiles.map((f) =>
+            f.id === item.id ? { ...f, status: 'success' } : f,
+          ),
+        );
+      } catch (error) {
+        anyFailed = true;
+        console.error('Upload failed:', error);
+        setFiles((currentFiles) =>
+          currentFiles.map((f) =>
+            f.id === item.id ? { ...f, status: 'error' } : f,
+          ),
+        );
+      }
+    }
+
+    setIsProcessing(false);
+    // Only clear the form when everything uploaded, so a failed attempt keeps
+    // the title/description for a retry.
+    if (!anyFailed) {
       setTitle('');
       setDescription('');
     }
@@ -191,6 +219,30 @@ export const Upload: React.FC = () => {
 
   const canStartProcessing =
     files.length > 0 && Boolean(projectId) && Boolean(title.trim());
+
+  // Viewers (read-only everywhere) cannot upload — block the whole page.
+  if (canUpload === false) {
+    return (
+      <div className="upload">
+        <div className="upload-blocked" role="alert">
+          <div className="upload-blocked-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+              <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+            </svg>
+          </div>
+          <h2>Viewers can't upload documents</h2>
+          <p>
+            Your role on these projects is <strong>Viewer</strong>, which is
+            read-only. Uploading and AI processing are available to Contributors,
+            Project Managers, and Administrators. Ask a Project Manager to change
+            your role if you need to upload.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="upload">
@@ -219,7 +271,7 @@ export const Upload: React.FC = () => {
               multiple
               onChange={handleFileSelect}
               className="upload-file-input"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.vtt"
+              accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.vtt,.srt"
             />
 
             <div className="upload-dropzone-icon" aria-hidden="true">

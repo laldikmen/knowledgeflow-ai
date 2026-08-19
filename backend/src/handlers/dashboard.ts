@@ -52,7 +52,29 @@ export const getDashboard = async (req: Request, res: Response) => {
 
     const placeholders = projectIds.map((_, i) => `$${i + 1}`).join(',');
 
-    // Recent uploads (last 10)
+    // Role-aware personal-dashboard scope for tasks & uploads:
+    //   admin              -> everything in every accessible project
+    //   project manager    -> everything in the projects they manage
+    //   contributor/viewer -> only items assigned to / uploaded by them
+    // (A user may manage some projects and merely contribute to others; the
+    // manager list captures exactly the projects they get the full view of.)
+    const projectRoles = (req.user as any).project_roles || [];
+    const managerProjectIds: number[] = isAdmin
+      ? projectIds
+      : projectRoles
+          .filter((r: any) => r.project_role === 'manager')
+          .map((r: any) => r.project_id);
+
+    // Shared WHERE fragments + params. Admin: $1 = accessible projects.
+    // Non-admin: $1 = managed projects, $2 = user id.
+    const scopeParams: any[] = isAdmin ? [projectIds] : [managerProjectIds, userId];
+    const taskScope = isAdmin
+      ? `a.project_id = ANY($1::int[])`
+      : `(a.project_id = ANY($1::int[]) OR a.assigned_to_user_id = $2)`;
+    // Recent activity / uploads is a project-visibility feed: every project
+    // member (including contributors and viewers) may see the documents in their
+    // projects, so this is scoped to ALL accessible projects for everyone — not
+    // to managed/own like the task lists.
     const recentUploads = await query(
       `SELECT
         d.id, d.title, d.project_id, d.file_type, d.document_type, d.status,
@@ -62,15 +84,16 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM documents d
       LEFT JOIN users u ON d.uploaded_by = u.id
       LEFT JOIN projects p ON d.project_id = p.id
-      WHERE d.project_id IN (${placeholders})
+      WHERE d.project_id = ANY($1::int[])
       ORDER BY d.uploaded_at DESC
       LIMIT 10`,
-      projectIds
+      [projectIds]
     );
 
-    // Draft tasks requiring review (managers/admins see all, contributors see their own)
-    let draftTasksQuery = `
-      SELECT
+    // Draft tasks awaiting review. Drafts have no assignee, so under the scope
+    // above only managers/admins see them (contributors/viewers get none here).
+    const draftTasks = await query(
+      `SELECT
         a.id, a.task_title, a.project_id, a.status, a.risk_level,
         u.name as assigned_to_name,
         p.name as project_name,
@@ -78,27 +101,13 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status = 'draft'
       AND a.created_by_ai = true
-    `;
-    const draftParams = [...projectIds];
-
-    // Draft AI outputs are visible to contributors and managers, but NOT to
-    // viewers. Restrict drafts to projects where this user is a manager or
-    // contributor (a user may be a viewer in some projects and a contributor in
-    // others). Admins see all drafts.
-    if (!isAdmin) {
-      draftTasksQuery += ` AND a.project_id IN (
-        SELECT project_id FROM project_members
-        WHERE user_id = $${projectIds.length + 1}
-          AND project_role IN ('manager', 'contributor')
-      )`;
-      draftParams.push(userId);
-    }
-
-    draftTasksQuery += ` ORDER BY a.created_at DESC LIMIT 15`;
-    const draftTasks = await query(draftTasksQuery, draftParams);
+      ORDER BY a.created_at DESC
+      LIMIT 15`,
+      scopeParams
+    );
 
     // Confirmed tasks
     const confirmedTasks = await query(
@@ -109,11 +118,11 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status = 'confirmed'
       ORDER BY a.created_at DESC
       LIMIT 10`,
-      projectIds
+      scopeParams
     );
 
     // In-progress tasks
@@ -125,11 +134,11 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status = 'in_progress'
       ORDER BY a.deadline ASC NULLS LAST
       LIMIT 10`,
-      projectIds
+      scopeParams
     );
 
     // Completed tasks (this week)
@@ -142,12 +151,12 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.completed_by = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status = 'completed'
       AND a.completed_at >= NOW() - INTERVAL '7 days'
       ORDER BY a.completed_at DESC
       LIMIT 10`,
-      projectIds
+      scopeParams
     );
 
     // Overdue tasks
@@ -159,14 +168,15 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status IN ('confirmed', 'in_progress')
       AND a.deadline < NOW()
       ORDER BY a.deadline ASC`,
-      projectIds
+      scopeParams
     );
 
-    // Upcoming deadlines (next 7 days)
+    // Upcoming deadlines (next 7 days), closest first — scoped like every other
+    // task list (admin: all; manager: their projects; others: assigned to them).
     const upcomingDeadlines = await query(
       `SELECT
         a.id, a.task_title, a.project_id, a.status, a.deadline,
@@ -176,11 +186,11 @@ export const getDashboard = async (req: Request, res: Response) => {
       FROM action_items a
       LEFT JOIN users u ON a.assigned_to_user_id = u.id
       LEFT JOIN projects p ON a.project_id = p.id
-      WHERE a.project_id IN (${placeholders})
+      WHERE ${taskScope}
       AND a.status IN ('confirmed', 'in_progress')
       AND a.deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days'
       ORDER BY a.deadline ASC`,
-      projectIds
+      scopeParams
     );
 
     // Project risk from the basic leading-indicator model (overdue, imminent
@@ -190,39 +200,80 @@ export const getDashboard = async (req: Request, res: Response) => {
       projectIds
     );
     const riskMap = await computeProjectRisk(projectIds);
+    const RISK_RANK: Record<string, number> = { High: 3, Medium: 2, Low: 1 };
+    // Every accessible project with its computed risk, ranked highest first.
+    const allProjectRisks = projectMeta.rows
+      .map((p) => {
+        const risk = riskMap.get(p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          department_name: p.department_name,
+          risk_level: risk?.level ?? 'Low',
+          risk_score: risk?.score ?? 0,
+          overdue: risk?.overdue ?? 0,
+          due_soon: risk?.due_soon_unstarted ?? 0,
+          high_risk_count: risk?.high_risk ?? 0,
+          unassigned: risk?.unassigned ?? 0,
+        };
+      })
+      .sort(
+        (a, b) =>
+          RISK_RANK[b.risk_level] - RISK_RANK[a.risk_level] ||
+          b.risk_score - a.risk_score ||
+          a.name.localeCompare(b.name),
+      );
+    // High/Medium subset (kept for the "high-risk projects" stat + callouts).
     const highRiskProjects = {
-      rows: projectMeta.rows
-        .map((p) => {
-          const risk = riskMap.get(p.id);
-          return {
-            id: p.id,
-            name: p.name,
-            department_name: p.department_name,
-            risk_level: risk?.level ?? 'Low',
-            risk_score: risk?.score ?? 0,
-            overdue: risk?.overdue ?? 0,
-            due_soon: risk?.due_soon_unstarted ?? 0,
-            high_risk_count: risk?.high_risk ?? 0,
-            unassigned: risk?.unassigned ?? 0,
-          };
-        })
-        .filter((p) => p.risk_level !== 'Low')
-        .sort((a, b) => b.risk_score - a.risk_score),
+      rows: allProjectRisks.filter((p) => p.risk_level !== 'Low'),
     };
 
-    // Summary statistics
+    // Summary statistics, scoped the same way. Projects counted are the ones the
+    // user can access; documents/tasks follow the personal scope above.
+    // Documents are visible to every project member, so count them across all
+    // accessible projects ($1) regardless of role.
+    const docScopeStat = `project_id = ANY($1::int[])`;
+    const taskScopeStat = isAdmin
+      ? `project_id = ANY($1::int[])`
+      : `(project_id = ANY($2::int[]) OR assigned_to_user_id = $3)`;
+    const statsParams: any[] = isAdmin
+      ? [projectIds]
+      : [projectIds, managerProjectIds, userId];
     const totalStats = await query(
       `SELECT
-        (SELECT COUNT(DISTINCT id) FROM projects WHERE id IN (${placeholders})) as total_projects,
-        (SELECT COUNT(*) FROM documents WHERE project_id IN (${placeholders})) as total_documents,
-        (SELECT COUNT(*) FROM action_items WHERE project_id IN (${placeholders})) as total_tasks,
-        (SELECT COUNT(*) FROM action_items WHERE project_id IN (${placeholders}) AND deadline < NOW() AND status IN ('confirmed', 'in_progress')) as overdue_count,
-        (SELECT COUNT(*) FROM action_items WHERE project_id IN (${placeholders}) AND deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days' AND status IN ('confirmed', 'in_progress')) as due_this_week
+        (SELECT COUNT(DISTINCT id) FROM projects WHERE id = ANY($1::int[])) as total_projects,
+        (SELECT COUNT(*) FROM documents WHERE ${docScopeStat}) as total_documents,
+        (SELECT COUNT(*) FROM action_items WHERE ${taskScopeStat}) as total_tasks,
+        (SELECT COUNT(*) FROM action_items WHERE ${taskScopeStat} AND deadline < NOW() AND status IN ('confirmed', 'in_progress')) as overdue_count,
+        (SELECT COUNT(*) FROM action_items WHERE ${taskScopeStat} AND deadline BETWEEN NOW() AND NOW() + INTERVAL '7 days' AND status IN ('confirmed', 'in_progress')) as due_this_week
       `,
-      projectIds
+      statsParams
     );
 
     const summary = totalStats.rows[0];
+
+    // Header summary: can this user REVIEW AI drafts (admin, or a manager in any
+    // accessible project)? If so, how many drafts await them; otherwise, how many
+    // active tasks are assigned to them. "Projects" = accessible project count.
+    const canReview = isAdmin || managerProjectIds.length > 0;
+
+    let reviewCount = 0;
+    if (canReview && managerProjectIds.length > 0) {
+      const rc = await query(
+        `SELECT COUNT(*) AS c FROM action_items
+         WHERE project_id IN (${managerProjectIds.map((_, i) => `$${i + 1}`).join(',')})
+           AND status = 'draft' AND created_by_ai = true`,
+        managerProjectIds
+      );
+      reviewCount = parseInt(rc.rows[0].c);
+    }
+
+    const assignedOpen = await query(
+      `SELECT COUNT(*) AS c FROM action_items
+       WHERE assigned_to_user_id = $1 AND status IN ('confirmed', 'in_progress')`,
+      [userId]
+    );
+    const assignedOpenCount = parseInt(assignedOpen.rows[0].c);
 
     return res.json({
       success: true,
@@ -235,12 +286,17 @@ export const getDashboard = async (req: Request, res: Response) => {
         overdue_tasks: overdueTasks.rows,
         upcoming_deadlines: upcomingDeadlines.rows,
         high_risk_projects: highRiskProjects.rows,
+        all_project_risks: allProjectRisks,
         summary: {
           total_projects: parseInt(summary.total_projects),
           total_documents: parseInt(summary.total_documents),
           total_tasks: parseInt(summary.total_tasks),
           overdue_count: parseInt(summary.overdue_count),
           tasks_due_this_week: parseInt(summary.due_this_week),
+          can_review: canReview,
+          review_count: reviewCount,
+          assigned_open_count: assignedOpenCount,
+          accessible_project_count: projectIds.length,
         },
       },
     });

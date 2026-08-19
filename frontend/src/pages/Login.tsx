@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import client from '../api/client';
@@ -117,7 +118,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   {showPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
-              <a href="#forgot" className="login-forgot">Forgot?</a>
+              <Link to="/forgot-password" className="login-forgot">Forgot?</Link>
             </div>
 
             <Button
@@ -130,19 +131,6 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               Sign in
             </Button>
           </form>
-
-          <div className="login-divider">
-            <span>SSO</span>
-          </div>
-
-          <Button
-            variant="secondary"
-            size="large"
-            fullWidth
-            onClick={() => console.log('SSO Login clicked')}
-          >
-            Continue with Acme SSO
-          </Button>
         </div>
       </div>
     </div>

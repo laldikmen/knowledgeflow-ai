@@ -7,6 +7,7 @@ import {
   updateTask,
   deleteTask,
   assignTask,
+  addTaskNote,
 } from '../handlers/tasks';
 import { verifyToken, requireProjectAccess } from '../middleware/auth';
 
@@ -35,5 +36,8 @@ router.delete('/:taskId', deleteTask);
 
 // Assign task to user (admin or manager only)
 router.post('/:taskId/assign', assignTask);
+
+// Add a progress / completion note (assignee, manager, or admin)
+router.post('/:taskId/notes', addTaskNote);
 
 export default router;

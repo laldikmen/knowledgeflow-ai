@@ -143,8 +143,20 @@ ${documentText}`;
       const match = String(value).match(/\d{4}-\d{2}-\d{2}/);
       return match ? match[0] : null;
     };
-    const cleanRisk = (value?: string): string =>
-      ['low', 'medium', 'high'].includes(String(value)) ? String(value) : 'medium';
+    // Risk level is derived from the deadline: within 3 days = high, within
+    // 7 days = medium, otherwise (or no deadline) = low. A manager/admin can
+    // still override it afterwards.
+    const riskFromDeadline = (deadline: string | null): string => {
+      if (!deadline) return 'low';
+      const due = new Date(`${deadline}T00:00:00`);
+      if (Number.isNaN(due.getTime())) return 'low';
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+      if (days <= 3) return 'high';
+      if (days <= 7) return 'medium';
+      return 'low';
+    };
 
     const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
     const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
@@ -183,6 +195,7 @@ ${documentText}`;
     // Store action items
     for (const item of actionItems) {
       if (item?.title && String(item.title).trim()) {
+        const deadline = cleanDeadline(item.deadline);
         await query(
           `INSERT INTO action_items (
             document_id, project_id, task_title, source_excerpt, suggested_owner_text,
@@ -194,9 +207,9 @@ ${documentText}`;
             String(item.title).trim(),
             item.source || null,
             item.suggested_owner || item.suggested_owner_text || null,
-            cleanDeadline(item.deadline),
+            deadline,
             'draft',
-            cleanRisk(item.risk),
+            riskFromDeadline(deadline),
             clampConfidence(item.confidence, 0.7),
           ]
         );
@@ -297,6 +310,61 @@ export const reviewSummary = async (req: Request, res: Response) => {
   }
 };
 
+// Edit the AI-generated summary's text (manager/admin). Editing invalidates any
+// prior review, so the summary returns to Draft for re-confirmation.
+export const updateSummary = async (req: Request, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const { summary_text } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (!summary_text || !String(summary_text).trim()) {
+      return res.status(400).json({ success: false, error: 'Summary text is required' });
+    }
+
+    const docResult = await query(
+      `SELECT project_id FROM documents WHERE id = $1`,
+      [documentId]
+    );
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [docResult.rows[0].project_id, req.user.id]
+    );
+    const isAdmin = req.user.system_role === 'admin';
+    const isManager = accessResult.rows[0]?.project_role === 'manager';
+    if (!isAdmin && !isManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only managers and admins can edit AI content',
+      });
+    }
+
+    const updated = await query(
+      `UPDATE ai_summaries
+       SET summary_text = $1, review_status = 'draft',
+           reviewed_by = NULL, reviewed_at = NULL, review_note = NULL
+       WHERE document_id = $2
+       RETURNING id`,
+      [String(summary_text).trim(), documentId]
+    );
+    if (updated.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Summary not found' });
+    }
+
+    return res.json({ success: true, message: 'Summary updated' });
+  } catch (error) {
+    console.error('Update summary error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
 export const reviewDecision = async (req: Request, res: Response) => {
   try {
     const { decisionId } = req.params;
@@ -374,6 +442,59 @@ export const reviewDecision = async (req: Request, res: Response) => {
       success: false,
       error: 'Internal server error',
     });
+  }
+};
+
+// Edit an AI-extracted decision's text (manager/admin). Editing invalidates any
+// prior review, so the decision goes back to Draft for re-confirmation.
+export const updateDecision = async (req: Request, res: Response) => {
+  try {
+    const { decisionId } = req.params;
+    const { decision_text } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (!decision_text || !String(decision_text).trim()) {
+      return res.status(400).json({ success: false, error: 'Decision text is required' });
+    }
+
+    const decResult = await query(
+      `SELECT d.document_id, doc.project_id
+       FROM decisions d JOIN documents doc ON d.document_id = doc.id
+       WHERE d.id = $1`,
+      [decisionId]
+    );
+    if (decResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Decision not found' });
+    }
+
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [decResult.rows[0].project_id, req.user.id]
+    );
+    const isAdmin = req.user.system_role === 'admin';
+    const isManager = accessResult.rows[0]?.project_role === 'manager';
+    if (!isAdmin && !isManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only managers and admins can edit AI content',
+      });
+    }
+
+    await query(
+      `UPDATE decisions
+       SET decision_text = $1, review_status = 'draft',
+           reviewed_by = NULL, reviewed_at = NULL, review_note = NULL
+       WHERE id = $2`,
+      [String(decision_text).trim(), decisionId]
+    );
+
+    return res.json({ success: true, message: 'Decision updated' });
+  } catch (error) {
+    console.error('Update decision error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 

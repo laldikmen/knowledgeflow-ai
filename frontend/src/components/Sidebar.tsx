@@ -112,6 +112,14 @@ const SettingsIcon: SidebarIcon = (props) => (
   </IconBase>
 );
 
+const LogoutIcon: SidebarIcon = (props) => (
+  <IconBase {...props}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <path d="m16 17 5-5-5-5" />
+    <path d="M21 12H9" />
+  </IconBase>
+);
+
 const NAVIGATION_ITEMS: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
   { id: 'projects', label: 'Projects', icon: ProjectsIcon },
@@ -204,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Settings</span>
         </button>
 
-        <div className="sidebar-user" onClick={onLogout} role="button" tabIndex={0}>
+        <div className="sidebar-user">
           <Avatar initials={userInitials} name={userName} size="small" />
 
           <div className="sidebar-user-info">
@@ -217,6 +225,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {userRole}
             </div>
           </div>
+
+          <button
+            type="button"
+            className="sidebar-logout"
+            onClick={onLogout}
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogoutIcon />
+          </button>
         </div>
       </div>
     </div>

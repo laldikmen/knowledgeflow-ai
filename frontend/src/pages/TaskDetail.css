@@ -169,6 +169,16 @@
   background: #fffaf0;
 }
 
+/* Manual tasks: informational (no source doc to open), so not clickable. */
+.task-detail-source-card--manual {
+  cursor: default;
+}
+
+.task-detail-source-card--manual:hover {
+  border-color: #ded7ca;
+  background: #faf8f3;
+}
+
 .task-detail-source-icon {
   width: 34px;
   height: 34px;

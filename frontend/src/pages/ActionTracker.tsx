@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import './ActionTracker.css';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { CreateTaskModal } from '../components/CreateTaskModal';
 import { formatDateOnly } from '../utils/date';
 
 type TaskStatus = 'draft' | 'confirmed' | 'in-progress' | 'completed' | 'cancelled';
@@ -14,6 +15,9 @@ interface ProjectOption {
   shortName: string;
   fullName: string;
   totalTasks: number;
+  // The current user's role in this project ('manager' | 'contributor' |
+  // 'viewer'); empty for admins (who manage everything).
+  role: string;
 }
 
 interface Task {
@@ -27,7 +31,6 @@ interface Task {
   status: TaskStatus;
   risk?: TaskRisk;
   overdue?: boolean;
-  atRisk?: boolean;
 }
 
 interface BoardColumn {
@@ -38,6 +41,7 @@ interface BoardColumn {
 
 interface ActionTrackerProps {
   currentUserName?: string;
+  currentUserRole?: string;
 }
 
 const COLUMN_LABELS: Record<TaskStatus, string> = {
@@ -58,21 +62,33 @@ const BOARD_STATUSES: TaskStatus[] = [
 
 export const ActionTracker: React.FC<ActionTrackerProps> = ({
   currentUserName = 'Alex Morgan',
+  currentUserRole = 'Viewer',
 }) => {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'board' | 'table'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectFilter>('all');
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
     type: 'confirm' | 'reject';
     taskId: number;
   } | null>(null);
   const [actionReason, setActionReason] = useState('');
+
+  const isAdmin = currentUserRole.trim().toLowerCase() === 'admin';
+  // Projects the user can create tasks in: admins can use any; others only the
+  // ones they manage.
+  const creatableProjects = useMemo(
+    () => projects.filter((p) => isAdmin || p.role === 'manager'),
+    [projects, isAdmin],
+  );
+  const canCreateTask = isAdmin || creatableProjects.length > 0;
 
   const loadTasks = async () => {
     try {
@@ -94,7 +110,6 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
         status: task.status || 'draft',
         risk: task.risk_level || 'medium',
         overdue: Number(task.overdue_days) > 0,
-        atRisk: Boolean(task.is_at_risk),
       }));
       setTasks(tasksData);
     } catch (error) {
@@ -114,11 +129,22 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
           shortName: proj.name,
           fullName: proj.name,
           totalTasks: 0,
+          role: (proj.project_role || '').toLowerCase(),
         }));
         setProjects(projectsData);
       } catch (error) {
         console.error('Failed to load projects', error);
         setProjects([]);
+      }
+
+      try {
+        const usersResponse = await client.get('/users');
+        setUsers(
+          (usersResponse.data || []).map((u: any) => ({ id: u.id, name: u.name })),
+        );
+      } catch (error) {
+        console.error('Failed to load users', error);
+        setUsers([]);
       } finally {
         setIsLoading(false);
       }
@@ -170,7 +196,7 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
       key={task.id}
       className={`tracker-task-card tracker-task-card--${task.status} ${
         task.overdue ? 'tracker-task-card--overdue' : ''
-      } ${task.atRisk && !task.overdue ? 'tracker-task-card--at-risk' : ''}`}
+      }`}
       role="button"
       tabIndex={0}
       aria-label={`Open task: ${task.title}`}
@@ -186,13 +212,6 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
         <div className="tracker-overdue-label">
           <span className="tracker-overdue-dot" />
           Overdue
-        </div>
-      )}
-
-      {task.atRisk && !task.overdue && (
-        <div className="tracker-at-risk-label">
-          <span className="tracker-at-risk-dot" />
-          At risk
         </div>
       )}
 
@@ -288,23 +307,36 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
           <p>{pageSubtitle}</p>
         </div>
 
-        <div className="tracker-view-toggle" aria-label="Action tracker view">
-          <button
-            type="button"
-            className={viewMode === 'board' ? 'active' : ''}
-            aria-pressed={viewMode === 'board'}
-            onClick={() => setViewMode('board')}
-          >
-            Board
-          </button>
-          <button
-            type="button"
-            className={viewMode === 'table' ? 'active' : ''}
-            aria-pressed={viewMode === 'table'}
-            onClick={() => setViewMode('table')}
-          >
-            Table
-          </button>
+        <div className="tracker-header-actions">
+          {canCreateTask && (
+            <button
+              type="button"
+              className="tracker-create-button"
+              onClick={() => setIsCreateOpen(true)}
+            >
+              <span className="tracker-create-icon" aria-hidden="true">+</span>
+              Create task
+            </button>
+          )}
+
+          <div className="tracker-view-toggle" aria-label="Action tracker view">
+            <button
+              type="button"
+              className={viewMode === 'board' ? 'active' : ''}
+              aria-pressed={viewMode === 'board'}
+              onClick={() => setViewMode('board')}
+            >
+              Board
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'table' ? 'active' : ''}
+              aria-pressed={viewMode === 'table'}
+              onClick={() => setViewMode('table')}
+            >
+              Table
+            </button>
+          </div>
         </div>
       </div>
 
@@ -464,6 +496,14 @@ export const ActionTracker: React.FC<ActionTrackerProps> = ({
         onInputChange={setActionReason}
         onClose={closeConfirmation}
         onConfirm={confirmPendingAction}
+      />
+
+      <CreateTaskModal
+        isOpen={isCreateOpen}
+        projects={creatableProjects.map((p) => ({ id: Number(p.id), name: p.fullName }))}
+        users={users}
+        onClose={() => setIsCreateOpen(false)}
+        onCreated={loadTasks}
       />
     </div>
   );

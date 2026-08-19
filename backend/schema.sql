@@ -7,10 +7,23 @@ CREATE TABLE users (
   system_role VARCHAR(50) NOT NULL DEFAULT 'member'
     CHECK (system_role IN ('admin', 'member')),
   account_status VARCHAR(20) NOT NULL DEFAULT 'active'
-    CHECK (account_status IN ('active', 'inactive')),
+    CHECK (account_status IN ('active', 'inactive', 'pending')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One-time tokens for account invites and password resets. The raw token lives
+-- only in the emailed / shown link; we store its SHA-256 hash.
+CREATE TABLE auth_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(64) NOT NULL,
+  purpose VARCHAR(20) NOT NULL DEFAULT 'invite',
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_auth_tokens_hash ON auth_tokens(token_hash);
 
 -- Projects table
 CREATE TABLE projects (
@@ -135,6 +148,17 @@ CREATE TABLE task_status_history (
   change_note TEXT,
   changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Progress / completion notes on a task
+CREATE TABLE task_notes (
+  id SERIAL PRIMARY KEY,
+  task_id INTEGER NOT NULL REFERENCES action_items(id) ON DELETE CASCADE,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  note_text TEXT NOT NULL,
+  note_type VARCHAR(20) DEFAULT 'progress',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_task_notes_task ON task_notes(task_id);
 
 -- Chat messages table
 CREATE TABLE chat_messages (

@@ -410,3 +410,49 @@ select.upload-control option {
     display: none;
   }
 }
+
+/* Read-only viewers: full-page block on the upload page. */
+.upload-blocked {
+  max-width: 560px;
+  margin: 48px auto;
+  padding: 40px 36px;
+  text-align: center;
+  border: 1px solid #f0d6cf;
+  border-radius: 20px;
+  background: #fdf3ef;
+}
+
+.upload-blocked-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f7ddd4;
+  color: #c65a3f;
+}
+
+.upload-blocked-icon svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.upload-blocked h2 {
+  margin: 0 0 10px;
+  color: #a23c22;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.upload-blocked p {
+  margin: 0;
+  color: #6f5a52;
+  font-size: 14px;
+  line-height: 1.55;
+}

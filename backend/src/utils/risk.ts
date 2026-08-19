@@ -31,7 +31,7 @@ const RISK_SELECT = `
     COUNT(*) FILTER (
       WHERE a.status = 'confirmed'
         AND a.deadline IS NOT NULL
-        AND a.deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'
+        AND a.deadline BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '5 days'
     ) AS due_soon_unstarted,
     COUNT(*) FILTER (
       WHERE a.status IN ('confirmed', 'in_progress') AND a.risk_level = 'high'
@@ -117,7 +117,7 @@ export function isTaskAtRisk(task: {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const soon = new Date(today);
-      soon.setDate(soon.getDate() + 3);
+      soon.setDate(soon.getDate() + 5);
       if (due < today) return true; // overdue
       if (status === 'confirmed' && due <= soon) return true; // due soon, unstarted
     }

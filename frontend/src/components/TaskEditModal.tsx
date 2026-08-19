@@ -203,9 +203,9 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
             <label className="task-edit-field">
               <span>Deadline</span>
               <input
+                type="date"
                 value={form.deadline}
                 onChange={(event) => updateField('deadline', event.target.value)}
-                placeholder="Jul 20, 2026"
               />
             </label>
 

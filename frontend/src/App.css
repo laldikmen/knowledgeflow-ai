@@ -1006,6 +1006,15 @@
   border-color: #75483d;
 }
 
+:root[data-theme='dark'] .tracker-column {
+  background: rgba(255, 255, 255, 0.025);
+  border-color: var(--kf-border-soft);
+}
+
+:root[data-theme='dark'] .tracker-column-header {
+  border-bottom-color: var(--kf-border-soft);
+}
+
 :root[data-theme='dark'] .tracker-task-title,
 :root[data-theme='dark'] .tracker-table td {
   color: var(--text);
@@ -1537,11 +1546,19 @@
 :root[data-theme='dark'] .kf-chat-workspace-header h1,
 :root[data-theme='dark'] .kf-chat-answer-content > p,
 :root[data-theme='dark'] .kf-chat-answer-content strong,
+:root[data-theme='dark'] .kf-chat-answer-body,
+:root[data-theme='dark'] .kf-chat-answer-body strong,
+:root[data-theme='dark'] .kf-chat-list li,
 :root[data-theme='dark'] .kf-chat-source-card,
 :root[data-theme='dark'] .kf-chat-source-card strong,
 :root[data-theme='dark'] .kf-chat-empty-state h2,
 :root[data-theme='dark'] .kf-chat-composer textarea {
   color: var(--text);
+}
+
+:root[data-theme='dark'] .kf-chat-citation {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
 }
 
 :root[data-theme='dark'] .kf-chat-answer-icon,

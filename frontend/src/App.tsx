@@ -15,6 +15,8 @@ import { Timeline } from './pages/Timeline';
 import { UserManagement } from './pages/UserManagement';
 import { Settings, type ThemePreference } from './pages/Settings';
 import { Login } from './pages/Login';
+import { SetPassword } from './pages/SetPassword';
+import { ForgotPassword } from './pages/ForgotPassword';
 
 interface AuthUser {
   token: string;
@@ -106,11 +108,29 @@ function App() {
     });
   };
 
+  // The invite / reset pages are public and must work even if someone is already
+  // signed in (e.g. an admin opening an invite link they just created). Handle
+  // them before the auth check so they always render standalone.
+  const publicPath = window.location.pathname;
+  if (publicPath === '/set-password' || publicPath === '/forgot-password') {
+    return (
+      <Router>
+        <Routes>
+          <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Router>
+    );
+  }
+
   if (!isAuthenticated || !authUser) {
     return (
       <Router>
         <Routes>
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>
@@ -150,10 +170,10 @@ function App() {
               />
             }
           />
-          <Route path="/upload" element={<Upload />} />
+          <Route path="/upload" element={<Upload currentUserRole={authUser.role} />} />
           <Route
             path="/action-tracker"
-            element={<ActionTracker currentUserName={authUser.name} />}
+            element={<ActionTracker currentUserName={authUser.name} currentUserRole={authUser.role} />}
           />
           <Route
             path="/tasks/:taskId"

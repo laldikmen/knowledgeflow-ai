@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
 import { query } from '../db/connection';
+import { createAuthToken } from '../utils/authTokens';
 
 // List all users. Available to any authenticated user because task-owner
 // assignment dropdowns (used by managers) need it. Management actions below
@@ -61,12 +61,12 @@ export const createUser = async (req: Request, res: Response) => {
       });
     }
 
-    const { name, email, password, system_role } = req.body;
+    const { name, email, system_role } = req.body;
 
-    if (!name || !email || !password) {
+    if (!name || !email) {
       return res.status(400).json({
         success: false,
-        error: 'Name, email and password are required',
+        error: 'Name and email are required',
       });
     }
 
@@ -84,18 +84,22 @@ export const createUser = async (req: Request, res: Response) => {
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
+    // The account is created PENDING with no usable password. The invited person
+    // sets their own password via the returned link, which activates them.
     const result = await query(
       `INSERT INTO users (name, email, password_hash, system_role, account_status)
-       VALUES ($1, $2, $3, $4, 'active')
+       VALUES ($1, $2, '', $3, 'pending')
        RETURNING id, name, email, system_role, account_status AS status`,
-      [name.trim(), email.trim().toLowerCase(), passwordHash, role]
+      [name.trim(), email.trim().toLowerCase(), role]
     );
+    const newUser = result.rows[0];
+
+    // Invite link valid for 72 hours (shown to the admin; emailed in production).
+    const { link } = await createAuthToken(newUser.id, 'invite', 72);
 
     return res.status(201).json({
       success: true,
-      data: result.rows[0],
+      data: { ...newUser, invite_link: link },
     });
   } catch (error) {
     console.error('Create user error:', error);

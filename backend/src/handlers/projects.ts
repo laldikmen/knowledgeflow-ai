@@ -246,14 +246,14 @@ export const getProjectDetail = async (req: Request, res: Response) => {
     project.risk_level = risk.level;
     project.risk_detail = risk;
     project.risk_summary =
-      'Risk is a leading-indicator score: 2× overdue + 2× due within 3 days but not started + 1× high-risk tasks + 1× unassigned active tasks. High if overdue > 2 or score ≥ 10; Medium if score ≥ 4; otherwise Low.';
+      'Risk is a leading-indicator score: 2× overdue + 2× due within 5 days but not started + 1× high-risk tasks + 1× unassigned active tasks. High if overdue > 2 or score ≥ 10; Medium if score ≥ 4; otherwise Low.';
 
     const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
     const riskFactors: string[] = [];
     if (risk.overdue > 0) riskFactors.push(`${plural(risk.overdue, 'overdue task')}`);
     if (risk.due_soon_unstarted > 0)
       riskFactors.push(
-        `${plural(risk.due_soon_unstarted, 'task')} due within 3 days and not started`,
+        `${plural(risk.due_soon_unstarted, 'task')} due within 5 days and not started`,
       );
     if (risk.high_risk > 0)
       riskFactors.push(`${plural(risk.high_risk, 'task')} flagged high risk`);

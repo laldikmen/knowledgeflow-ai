@@ -12,7 +12,7 @@ interface ChatMessage {
   type: 'user' | 'assistant';
   content: string;
   emphasis?: string;
-  source?: ChatSource;
+  sources?: ChatSource[];
   unavailable?: boolean;
 }
 
@@ -31,20 +31,90 @@ interface ChatProject {
 
 const initialSessions: ChatSession[] = [];
 
-const renderMessageText = (message: ChatMessage) => {
-  if (!message.emphasis || !message.content.includes(message.emphasis)) {
-    return message.content;
+// Render a line's inline markdown: **bold** and [Document N] citation chips.
+const renderInline = (text: string, keyBase: string): React.ReactNode[] => {
+  const nodes: React.ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|\[[^\]]*\])/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let i = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) nodes.push(text.slice(last, match.index));
+    const token = match[0];
+    if (token.startsWith('**')) {
+      nodes.push(<strong key={`${keyBase}-b${i}`}>{token.slice(2, -2)}</strong>);
+    } else {
+      nodes.push(
+        <span key={`${keyBase}-c${i}`} className="kf-chat-citation">
+          {token.slice(1, -1)}
+        </span>,
+      );
+    }
+    last = match.index + token.length;
+    i += 1;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+};
+
+// Lightweight markdown renderer for assistant answers: paragraphs, numbered and
+// bulleted lists, bold, and inline document citations.
+const MarkdownAnswer: React.FC<{ text: string }> = ({ text }) => {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+  const numbered = (l: string) => /^\s*\d+\.\s+/.test(l);
+  const bulleted = (l: string) => /^\s*[-*•]\s+/.test(l);
+
+  while (i < lines.length) {
+    if (!lines[i].trim()) {
+      i += 1;
+      continue;
+    }
+
+    if (numbered(lines[i])) {
+      const items: string[] = [];
+      while (i < lines.length && numbered(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ol key={`k${key++}`} className="kf-chat-list">
+          {items.map((it, j) => (
+            <li key={j}>{renderInline(it, `ol${key}-${j}`)}</li>
+          ))}
+        </ol>,
+      );
+      continue;
+    }
+
+    if (bulleted(lines[i])) {
+      const items: string[] = [];
+      while (i < lines.length && bulleted(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*•]\s+/, ''));
+        i += 1;
+      }
+      blocks.push(
+        <ul key={`k${key++}`} className="kf-chat-list">
+          {items.map((it, j) => (
+            <li key={j}>{renderInline(it, `ul${key}-${j}`)}</li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+
+    const para: string[] = [];
+    while (i < lines.length && lines[i].trim() && !numbered(lines[i]) && !bulleted(lines[i])) {
+      para.push(lines[i]);
+      i += 1;
+    }
+    blocks.push(<p key={`k${key++}`}>{renderInline(para.join(' '), `p${key}`)}</p>);
   }
 
-  const [before, after] = message.content.split(message.emphasis);
-
-  return (
-    <>
-      {before}
-      <strong>{message.emphasis}</strong>
-      {after}
-    </>
-  );
+  return <>{blocks}</>;
 };
 
 const createSessionTitle = (question: string) =>
@@ -90,14 +160,18 @@ export const AIChat: React.FC = () => {
         const response = await client.get(`/ai/chat/${selectedProject}/my-history`);
         const rows: any[] = Array.isArray(response.data) ? response.data : [];
 
-        const parseFirstSource = (raw: any): ChatSource | undefined => {
+        const parseSources = (raw: any): ChatSource[] => {
           let arr = raw;
           if (typeof raw === 'string') {
-            try { arr = JSON.parse(raw); } catch { return undefined; }
+            try { arr = JSON.parse(raw); } catch { return []; }
           }
-          if (!Array.isArray(arr) || arr.length === 0) return undefined;
-          const s = arr[0];
-          return { title: s.title || s.document_title, meta: s.meta || s.excerpt };
+          if (!Array.isArray(arr)) return [];
+          return arr
+            .map((s: any) => ({
+              title: s.title || s.document_title,
+              meta: s.meta || s.excerpt,
+            }))
+            .filter((s: ChatSource) => !!s.title);
         };
 
         const loaded: ChatSession[] = rows.map((row) => {
@@ -118,7 +192,7 @@ export const AIChat: React.FC = () => {
                 id: rid * 2 + 1,
                 type: 'assistant',
                 content: row.answer || '',
-                source: parseFirstSource(row.sources),
+                sources: parseSources(row.sources),
               },
             ],
           };
@@ -184,13 +258,17 @@ export const AIChat: React.FC = () => {
       });
 
       const data = response.data.data ?? response.data;
-      const firstSource = Array.isArray(data.sources) ? data.sources[0] : undefined;
+      const sources: ChatSource[] = Array.isArray(data.sources)
+        ? data.sources
+            .map((s: any) => ({
+              title: s.document_title || s.title,
+              meta: s.excerpt || s.meta,
+            }))
+            .filter((s: ChatSource) => !!s.title)
+        : [];
       return {
         content: data.answer || data.content,
-        source: firstSource ? {
-          title: firstSource.document_title || firstSource.title,
-          meta: firstSource.excerpt || firstSource.meta,
-        } : undefined,
+        sources,
         unavailable: false,
       };
     } catch (error) {
@@ -420,25 +498,39 @@ export const AIChat: React.FC = () => {
                   )}
 
                   <div className="kf-chat-answer-content">
-                    <p className={message.unavailable ? 'kf-chat-unavailable-text' : ''}>
-                      {renderMessageText(message)}
-                    </p>
+                    {message.unavailable ? (
+                      <p className="kf-chat-unavailable-text">{message.content}</p>
+                    ) : (
+                      <div className="kf-chat-answer-body">
+                        <MarkdownAnswer text={message.content} />
+                      </div>
+                    )}
 
-                    {message.source && (
+                    {message.sources && message.sources.length > 0 && (
                       <div className="kf-chat-source-block">
-                        <span className="kf-chat-source-label">Source</span>
-                        <button type="button" className="kf-chat-source-card">
-                          <span className="kf-chat-source-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24">
-                              <circle cx="12" cy="12" r="7" />
-                              <path d="M12 8v4l3 2" />
-                            </svg>
-                          </span>
-                          <span>
-                            <strong>{message.source.title}</strong>
-                            {message.source.meta && <small>{message.source.meta}</small>}
-                          </span>
-                        </button>
+                        <span className="kf-chat-source-label">
+                          {message.sources.length > 1 ? 'Sources' : 'Source'}
+                        </span>
+                        <div className="kf-chat-source-list">
+                          {message.sources.map((source, index) => (
+                            <button
+                              type="button"
+                              className="kf-chat-source-card"
+                              key={`${source.title}-${index}`}
+                            >
+                              <span className="kf-chat-source-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                  <circle cx="12" cy="12" r="7" />
+                                  <path d="M12 8v4l3 2" />
+                                </svg>
+                              </span>
+                              <span>
+                                <strong>{source.title}</strong>
+                                {source.meta && <small>{source.meta}</small>}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

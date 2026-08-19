@@ -143,8 +143,20 @@ ${documentText}`;
       const match = String(value).match(/\d{4}-\d{2}-\d{2}/);
       return match ? match[0] : null;
     };
-    const cleanRisk = (value?: string): string =>
-      ['low', 'medium', 'high'].includes(String(value)) ? String(value) : 'medium';
+    // Risk level is derived from the deadline: within 3 days = high, within
+    // 7 days = medium, otherwise (or no deadline) = low. A manager/admin can
+    // still override it afterwards.
+    const riskFromDeadline = (deadline: string | null): string => {
+      if (!deadline) return 'low';
+      const due = new Date(`${deadline}T00:00:00`);
+      if (Number.isNaN(due.getTime())) return 'low';
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+      if (days <= 3) return 'high';
+      if (days <= 7) return 'medium';
+      return 'low';
+    };
 
     const summary = typeof parsed.summary === 'string' ? parsed.summary : '';
     const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
@@ -183,6 +195,7 @@ ${documentText}`;
     // Store action items
     for (const item of actionItems) {
       if (item?.title && String(item.title).trim()) {
+        const deadline = cleanDeadline(item.deadline);
         await query(
           `INSERT INTO action_items (
             document_id, project_id, task_title, source_excerpt, suggested_owner_text,
@@ -194,9 +207,9 @@ ${documentText}`;
             String(item.title).trim(),
             item.source || null,
             item.suggested_owner || item.suggested_owner_text || null,
-            cleanDeadline(item.deadline),
+            deadline,
             'draft',
-            cleanRisk(item.risk),
+            riskFromDeadline(deadline),
             clampConfidence(item.confidence, 0.7),
           ]
         );

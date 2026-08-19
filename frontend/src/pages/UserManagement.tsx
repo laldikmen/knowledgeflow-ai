@@ -16,7 +16,7 @@ const PROJECT_ROLES: ProjectRole[] = ['manager', 'contributor', 'viewer'];
 const projectRoleLabel = (role: ProjectRole) =>
   role.charAt(0).toUpperCase() + role.slice(1);
 
-type AccountStatus = 'active' | 'inactive';
+type AccountStatus = 'active' | 'inactive' | 'pending';
 
 interface ProjectOption {
   id: string;
@@ -92,6 +92,12 @@ export const UserManagement: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [pendingCreate, setPendingCreate] = useState<UserFormState | null>(null);
   const [pendingStatusUser, setPendingStatusUser] = useState<ManagedUser | null>(null);
+  const [inviteResult, setInviteResult] = useState<{
+    name: string;
+    email: string;
+    link: string;
+  } | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchData = async () => {
@@ -240,16 +246,12 @@ export const UserManagement: React.FC = () => {
       return;
     }
 
-    // Creating a new account requires an initial password.
-    if (form.password.trim().length < 6) {
-      setFormError('Set a temporary password of at least 6 characters.');
-      return;
-    }
-
+    // No password here — the invited person sets their own via the emailed /
+    // shown link, which activates their account.
     setPendingCreate({
       fullName,
       email,
-      password: form.password,
+      password: '',
       role: form.role,
       memberships: { ...form.memberships },
     });
@@ -270,7 +272,6 @@ export const UserManagement: React.FC = () => {
       const created = await client.post('/users', {
         name: pendingCreate.fullName,
         email: pendingCreate.email,
-        password: pendingCreate.password,
         system_role: toSystemRole(pendingCreate.role),
       });
 
@@ -281,6 +282,12 @@ export const UserManagement: React.FC = () => {
       }
 
       await fetchData();
+      // Surface the invite link so the admin can share it (link-shown mode).
+      setInviteResult({
+        name: pendingCreate.fullName,
+        email: pendingCreate.email,
+        link: created.data?.invite_link || '',
+      });
       setPendingCreate(null);
       setEditingUserId(null);
       setForm(EMPTY_FORM);
@@ -403,7 +410,11 @@ export const UserManagement: React.FC = () => {
                     className={`user-management-status user-management-status--${user.status}`}
                   >
                     <span aria-hidden="true" />
-                    {user.status === 'active' ? 'Active' : 'Inactive'}
+                    {user.status === 'active'
+                      ? 'Active'
+                      : user.status === 'pending'
+                        ? 'Pending'
+                        : 'Inactive'}
                   </span>
                 </td>
 
@@ -501,20 +512,10 @@ export const UserManagement: React.FC = () => {
               </div>
 
               {editingUserId === null && (
-                <label className="user-management-field user-management-field--full">
-                  <span>Temporary password</span>
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        password: event.target.value,
-                      }))
-                    }
-                    placeholder="At least 6 characters"
-                  />
-                </label>
+                <p className="user-management-role-hint">
+                  No password needed — we'll create an invite link the new user
+                  opens to set their own password.
+                </p>
               )}
 
               <label className="user-management-field user-management-field--full">
@@ -595,12 +596,13 @@ export const UserManagement: React.FC = () => {
 
       <ConfirmationModal
         isOpen={pendingCreate !== null}
-        title="Create this user?"
+        title="Invite this user?"
         description={
           pendingCreate ? (
             <p>
-              An active account will be created for <strong>{pendingCreate.fullName}</strong>{' '}
-              ({pendingCreate.email}).
+              A pending account will be created for <strong>{pendingCreate.fullName}</strong>{' '}
+              ({pendingCreate.email}). They activate it by opening an invite link
+              and setting their own password.
             </p>
           ) : null
         }
@@ -648,6 +650,71 @@ export const UserManagement: React.FC = () => {
         onClose={() => setPendingStatusUser(null)}
         onConfirm={confirmStatusChange}
       />
+
+      {inviteResult && (
+        <div
+          className="user-management-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setInviteResult(null);
+              setInviteCopied(false);
+            }
+          }}
+        >
+          <section className="user-management-modal" role="dialog" aria-modal="true">
+            <header className="user-management-modal-header">
+              <div>
+                <span>Invite created</span>
+                <h2>{inviteResult.name} is ready to activate</h2>
+              </div>
+            </header>
+
+            <p className="user-management-invite-copy">
+              Send <strong>{inviteResult.email}</strong> this link to set their
+              password and activate their account. It expires in 72 hours.
+            </p>
+
+            <div className="user-management-invite-link">
+              <input readOnly value={inviteResult.link} onFocus={(e) => e.target.select()} />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(inviteResult.link);
+                    setInviteCopied(true);
+                  } catch {
+                    setInviteCopied(false);
+                  }
+                }}
+              >
+                {inviteCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+
+            <p className="user-management-invite-note">
+              In production this link is emailed automatically. For now, share it
+              directly.
+            </p>
+
+            <div
+              className="user-management-modal-actions"
+              style={{ gridTemplateColumns: '1fr' }}
+            >
+              <button
+                type="button"
+                className="user-management-button user-management-button--primary"
+                onClick={() => {
+                  setInviteResult(null);
+                  setInviteCopied(false);
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 };

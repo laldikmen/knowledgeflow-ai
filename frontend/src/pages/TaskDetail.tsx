@@ -165,6 +165,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const [actionNote, setActionNote] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [users, setUsers] = useState<{ id: number; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -176,7 +177,17 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         setUsers([]);
       }
     };
+    const fetchProjects = async () => {
+      try {
+        const response = await client.get('/projects');
+        setProjects((response.data || []).map((p: any) => ({ id: p.id, name: p.name })));
+      } catch (error) {
+        console.error('Failed to load projects', error);
+        setProjects([]);
+      }
+    };
     fetchUsers();
+    fetchProjects();
   }, []);
 
   const loadTask = async () => {
@@ -207,10 +218,10 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         risk: data.risk_level || 'low',
         status: normalizedStatus,
         overdueDays: data.overdue_days,
-        sourceDocumentId: data.source_document_id,
+        sourceDocumentId: data.document_id,
         sourceDocument: data.source_document_title || 'Source Document',
-        sourceReference: data.source_reference || 'Extracted from source',
-        sourceConfidence: data.confidence_score,
+        sourceReference: data.source_excerpt || 'Extracted from source',
+        sourceConfidence: data.ai_confidence,
         notes: data.notes?.map((note: any) => ({
           id: note.id,
           author: note.author,
@@ -397,6 +408,15 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
       (u) => u.name.trim().toLowerCase() === values.owner.trim().toLowerCase(),
     );
 
+    // Resolve the selected project name to an id, and only send project_id when
+    // the reviewer actually moved the task to a different project.
+    const matchedProject = projects.find(
+      (p) => p.name.trim().toLowerCase() === values.projectName.trim().toLowerCase(),
+    );
+    const projectChanged =
+      matchedProject &&
+      values.projectName.trim().toLowerCase() !== task.projectName.trim().toLowerCase();
+
     try {
       await client.put(`/tasks/${task.id}`, {
         task_title: values.title,
@@ -404,6 +424,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         assigned_to_user_id: matchedUser ? matchedUser.id : null,
         deadline: values.deadline || null,
         risk_level: values.risk,
+        source_excerpt: values.sourceContext,
+        ...(projectChanged ? { project_id: matchedProject!.id } : {}),
       });
       await loadTask();
     } catch (error) {
@@ -706,6 +728,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         initialValues={taskEditValues}
         onClose={() => setShowEditModal(false)}
         onSave={saveTaskEdit}
+        projectOptions={projects.map((p) => p.name)}
+        ownerOptions={users.map((u) => u.name)}
       />
 
     </section>

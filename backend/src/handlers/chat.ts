@@ -119,28 +119,35 @@ export const askQuestion = async (req: Request, res: Response) => {
       keywords
     );
 
-    // Build context from relevant documents
-    let context = `Project: ${projectName}\n\n`;
+    // The spec's exact wording for "no grounding found". Used verbatim so the
+    // assistant never fabricates an answer when the accessible documents can't
+    // support one.
+    const NO_INFO_MESSAGE =
+      'I could not find this information in the documents available to your account.';
 
-    if (relevantDocs.length > 0) {
-      context += 'Relevant documents:\n\n';
+    // If nothing in the accessible documents matched, don't even call the model
+    // — there is nothing to ground on. Answer with the exact required message.
+    let answer: string;
+    if (relevantDocs.length === 0) {
+      answer = NO_INFO_MESSAGE;
+    } else {
+      let context = `Project: ${projectName}\n\nRelevant documents:\n\n`;
       relevantDocs.forEach((doc, index) => {
         const excerpt = doc.text.substring(0, 500);
         context += `[Document ${index + 1}: ${doc.title}]\n${excerpt}...\n\n`;
       });
-    } else {
-      context +=
-        'Note: No specific documents found for this query. Please try more specific keywords.\n\n';
+
+      context += `Answer the question using ONLY the documents above. Do not use outside knowledge.
+
+Question: ${question}
+
+Rules:
+- If the documents above do not contain enough information to answer, reply with EXACTLY this sentence and nothing else: "${NO_INFO_MESSAGE}"
+- Otherwise, answer concisely and cite which document(s) you used.`;
+
+      // Call Bedrock to generate a grounded answer.
+      answer = await callBedrock(context);
     }
-
-    context += `Based on the documents above, please answer this question: ${question}
-
-If the documents do not contain enough information to fully answer the question, please state what information is missing.
-
-Always cite which documents you're referencing in your answer.`;
-
-    // Call Bedrock to generate answer
-    const answer = await callBedrock(context);
 
     // Store conversation in chat_messages
     const chatResult = await query(

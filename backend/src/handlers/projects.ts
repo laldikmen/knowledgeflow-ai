@@ -99,7 +99,8 @@ export const getProjectDetail = async (req: Request, res: Response) => {
         (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'confirmed') as confirmed_task_count,
         (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'in_progress') as in_progress_task_count,
         (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'completed') as completed_task_count,
-        (SELECT COUNT(*) FROM action_items WHERE project_id = p.id AND status = 'overdue') as overdue_task_count,
+        (SELECT COUNT(*) FROM action_items WHERE project_id = p.id
+           AND deadline < CURRENT_DATE AND status IN ('confirmed', 'in_progress')) as overdue_task_count,
         p.created_at, p.updated_at
       FROM projects p
       LEFT JOIN users u ON p.created_by = u.id
@@ -251,6 +252,22 @@ export const addProjectMember = async (req: Request, res: Response) => {
       });
     }
 
+    // Only a System Administrator may change an existing Manager's role. A
+    // (non-admin) manager must not be able to downgrade another manager via the
+    // upsert path.
+    if (!isAdmin) {
+      const existing = await query(
+        `SELECT project_role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+        [projectId, user_id]
+      );
+      if (existing.rows[0]?.project_role === 'manager') {
+        return res.status(403).json({
+          success: false,
+          error: 'Only admins can change a project manager',
+        });
+      }
+    }
+
     // Add member
     await query(
       `INSERT INTO project_members (project_id, user_id, project_role, added_by)
@@ -299,6 +316,20 @@ export const removeProjectMember = async (req: Request, res: Response) => {
         success: false,
         error: 'Only admins and project managers can remove members',
       });
+    }
+
+    // Only a System Administrator may remove another Project Manager.
+    if (!isAdmin) {
+      const target = await query(
+        `SELECT project_role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+        [projectId, userId]
+      );
+      if (target.rows[0]?.project_role === 'manager') {
+        return res.status(403).json({
+          success: false,
+          error: 'Only admins can remove a project manager',
+        });
+      }
     }
 
     const result = await query(

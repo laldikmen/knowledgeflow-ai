@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 import './Documents.css';
 
 type DocumentType = 'pdf' | 'doc' | 'ppt' | 'transcript';
@@ -10,12 +11,14 @@ interface DocumentItem {
   id: number;
   name: string;
   projectName: string;
+  projectId: number;
+  description: string;
   type: DocumentType;
   uploadedBy: string;
   uploadedDate: string;
   status: DocumentStatus;
   details: string;
-  action: 'Open' | 'Process' | 'Retry';
+  canManage: boolean;
 }
 
 const TYPE_FILTERS: Array<{ value: 'all' | DocumentType; label: string }> = [
@@ -80,42 +83,103 @@ const DocumentIcon: React.FC<{ type: DocumentType; failed?: boolean }> = ({
 export const Documents: React.FC = () => {
   const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterType, setFilterType] = useState<'all' | DocumentType>('all');
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? '';
 
-  useEffect(() => {
-    const fetchDocuments = async () => {
-      try {
-        const response = await client.get('/documents');
-        const documents = response.data.map((doc: any) => ({
-          id: doc.id,
-          name: doc.title || doc.name,
-          projectName: doc.project_name || '—',
-          type: doc.document_type || 'pdf',
-          uploadedBy: doc.uploaded_by || doc.created_by,
-          uploadedDate: new Date(doc.created_at).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-          }),
-          status: doc.status || 'uploaded',
-          details:
-            doc.file_size_kb && doc.file_size_kb > 0
-              ? `${(doc.file_size_kb / 1024).toFixed(1)} MB`
-              : doc.description || '',
-          action: doc.status === 'processed' ? 'Open' : 'Process',
-        }));
-        setDocuments(documents);
-      } catch (error) {
-        console.error('Failed to load documents', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  // Edit / delete state
+  const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editProjectId, setEditProjectId] = useState('');
+  const [editError, setEditError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<DocumentItem | null>(null);
 
-    fetchDocuments();
+  const loadDocuments = async () => {
+    try {
+      const response = await client.get('/documents');
+      const docs = response.data.map((doc: any) => ({
+        id: doc.id,
+        name: doc.title || doc.name,
+        projectName: doc.project_name || '—',
+        projectId: doc.project_id,
+        description: doc.description || '',
+        type: doc.document_type || 'pdf',
+        uploadedBy: doc.uploaded_by || doc.created_by,
+        uploadedDate: new Date(doc.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        }),
+        status: doc.status || 'uploaded',
+        details:
+          doc.file_size_kb && doc.file_size_kb > 0
+            ? `${(doc.file_size_kb / 1024).toFixed(1)} MB`
+            : doc.description || '',
+        canManage: Boolean(doc.can_edit),
+      }));
+      setDocuments(docs);
+    } catch (error) {
+      console.error('Failed to load documents', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDocuments();
+    client
+      .get('/projects')
+      .then((r) =>
+        setProjects((r.data || []).map((p: any) => ({ id: p.id, name: p.name }))),
+      )
+      .catch(() => setProjects([]));
   }, []);
+
+  const openEdit = (doc: DocumentItem) => {
+    setEditingDoc(doc);
+    setEditTitle(doc.name);
+    setEditDescription(doc.description);
+    setEditProjectId(String(doc.projectId));
+    setEditError('');
+  };
+
+  const saveEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingDoc) return;
+    if (!editTitle.trim()) {
+      setEditError('Title is required.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await client.patch(`/documents/${editingDoc.id}`, {
+        title: editTitle.trim(),
+        description: editDescription,
+        project_id: Number(editProjectId),
+      });
+      setEditingDoc(null);
+      await loadDocuments();
+    } catch (error: any) {
+      setEditError(error.response?.data?.error || 'Could not save the document.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingDoc) return;
+    try {
+      await client.delete(`/documents/${deletingDoc.id}`);
+      setDeletingDoc(null);
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to delete document', error);
+      setDeletingDoc(null);
+    }
+  };
 
   const filteredDocuments = useMemo(() => {
     return documents.filter((document) => {
@@ -257,17 +321,32 @@ export const Documents: React.FC = () => {
                   </div>
 
                   <div className="document-table-actions" role="cell">
-                    <button
-                      type="button"
-                      className="document-table-action"
-                      disabled={isProcessing}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        openDocument(document.id);
-                      }}
-                    >
-                      {document.action}
-                    </button>
+                    {document.canManage ? (
+                      <>
+                        <button
+                          type="button"
+                          className="document-table-action"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEdit(document);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="document-table-action document-table-action--danger"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeletingDoc(document);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    ) : (
+                      <span className="document-table-readonly">View only</span>
+                    )}
                   </div>
                 </div>
               );
@@ -275,6 +354,104 @@ export const Documents: React.FC = () => {
           )}
         </div>
       </div>
+
+      {editingDoc && (
+        <div
+          className="documents-edit-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setEditingDoc(null);
+          }}
+        >
+          <form className="documents-edit-modal" onSubmit={saveEdit} role="dialog" aria-modal="true">
+            <div className="documents-edit-header">
+              <div>
+                <span>Document</span>
+                <h2>Edit document</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                className="documents-edit-close"
+                onClick={() => setEditingDoc(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <label className="documents-edit-field">
+              <span>Project</span>
+              <select
+                value={editProjectId}
+                onChange={(event) => setEditProjectId(event.target.value)}
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="documents-edit-field">
+              <span>Title</span>
+              <input
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                autoFocus
+              />
+            </label>
+
+            <label className="documents-edit-field">
+              <span>Description</span>
+              <textarea
+                rows={3}
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                placeholder="Optional description"
+              />
+            </label>
+
+            {editError && <div className="documents-edit-error">{editError}</div>}
+
+            <div className="documents-edit-actions">
+              <button
+                type="button"
+                className="documents-edit-button documents-edit-button--secondary"
+                onClick={() => setEditingDoc(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="documents-edit-button documents-edit-button--primary"
+                disabled={isSaving}
+              >
+                {isSaving ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={deletingDoc !== null}
+        title="Delete this document?"
+        description={
+          deletingDoc ? (
+            <p>
+              “{deletingDoc.name}” and its extracted text, summary, decisions, and
+              AI-drafted action items will be permanently deleted. This can't be
+              undone.
+            </p>
+          ) : null
+        }
+        confirmLabel="Delete document"
+        cancelLabel="Keep"
+        tone="danger"
+        onClose={() => setDeletingDoc(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

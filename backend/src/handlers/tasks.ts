@@ -295,6 +295,13 @@ export const getTaskDetail = async (req: Request, res: Response) => {
       });
     }
 
+    // Whether this user may edit the task (admin or the project's manager) — the
+    // frontend uses this to show the Edit / lifecycle-manager controls.
+    task.can_manage =
+      req.user.system_role === 'admin' ||
+      accessResult.rows[0]?.project_role === 'manager';
+    task.my_project_role = accessResult.rows[0]?.project_role || null;
+
     // Get status history
     const historyResult = await query(
       `SELECT

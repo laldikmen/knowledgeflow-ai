@@ -48,6 +48,7 @@ interface TaskDetailData {
   sourceConfidence?: number;
   createdManually?: boolean;
   createdByName?: string;
+  canManage?: boolean;
   notes: TaskNote[];
   history: TaskHistoryItem[];
 }
@@ -226,6 +227,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         sourceConfidence: data.ai_confidence,
         createdManually: Boolean(data.created_manually),
         createdByName: data.created_by_name || undefined,
+        canManage: Boolean(data.can_manage),
         notes: data.notes?.map((note: any) => ({
           id: note.id,
           author: note.author,
@@ -286,7 +288,9 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
     setShowEditModal(false);
   }, [numericTaskId]);
 
-  const canManage = canManageTasks(currentUserRole);
+  // Prefer the backend's per-project answer (admin or the project's manager);
+  // fall back to the system role while the task is still loading.
+  const canManage = task?.canManage ?? canManageTasks(currentUserRole);
   const isOwner = task ? normalise(task.ownerName) === normalise(currentUserName) : false;
   const canExecute = canManage || isOwner;
   const canViewHistory = canManage || isOwner;
@@ -447,6 +451,8 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const showComplete = ['confirmed', 'in-progress'].includes(task.status) && canExecute;
   const showCancel = ['confirmed', 'in-progress'].includes(task.status) && canManage;
   const showDraftActions = task.status === 'draft' && canManage;
+  // Managers/admins can edit an active task's details (owner, deadline, etc.).
+  const showEdit = canManage && ['confirmed', 'in-progress'].includes(task.status);
   const canAddNotes = ['confirmed', 'in-progress'].includes(task.status) && canExecute;
 
   return (
@@ -589,7 +595,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
               </div>
             </dl>
 
-            {(showStart || showComplete || showCancel || showDraftActions) && (
+            {(showStart || showComplete || showCancel || showDraftActions || showEdit) && (
               <div className={`task-detail-actions ${showDraftActions ? 'task-detail-actions--draft' : ''}`}>
                 {showDraftActions && (
                   <>
@@ -636,6 +642,16 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
                 {showCancel && (
                   <button type="button" className="task-detail-button task-detail-button--danger" onClick={() => openActionModal('cancel')}>
                     Cancel task
+                  </button>
+                )}
+
+                {showEdit && (
+                  <button
+                    type="button"
+                    className="task-detail-button task-detail-button--secondary"
+                    onClick={() => setShowEditModal(true)}
+                  >
+                    Edit task details
                   </button>
                 )}
               </div>

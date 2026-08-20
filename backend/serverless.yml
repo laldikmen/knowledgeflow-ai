@@ -83,11 +83,16 @@ functions:
     timeout: 30
     memorySize: 512
 
-# Packaging - use pre-compiled dist folder
+# Packaging - use pre-compiled dist folder.
+# Exclude build-only tooling from the Lambda bundle: the code ships precompiled
+# in dist/, so the TypeScript compiler is never needed at runtime. Dropping it
+# keeps the unzipped package under Lambda's 250 MiB limit.
 package:
   individually: false
   patterns:
     - 'dist/**'
     - 'node_modules/**'
     - '!node_modules/serverless/**'
+    - '!node_modules/typescript/**'
+    - '!node_modules/@typescript/**'
     - '!.git/**'

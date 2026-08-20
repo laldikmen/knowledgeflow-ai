@@ -6,6 +6,7 @@ import {
   getProjectDocuments,
   getDocumentDetail,
   deleteDocument,
+  updateDocument,
   setDocumentText,
 } from '../handlers/documents';
 import { verifyToken, requireProjectAccess } from '../middleware/auth';
@@ -35,6 +36,9 @@ router.get('/project/:projectId', requireProjectAccess, getProjectDocuments);
 
 // Get document details
 router.get('/:documentId', getDocumentDetail);
+
+// Edit document metadata (title / description / project)
+router.patch('/:documentId', updateDocument);
 
 // Delete document
 router.delete('/:documentId', deleteDocument);

@@ -152,27 +152,40 @@ export const getAllDocuments = async (req: Request, res: Response) => {
 
     const isAdmin = req.user.system_role === 'admin';
 
+    // can_edit: admin, or the manager of the document's project — drives whether
+    // Edit/Delete controls show in the UI (backend enforces it too).
     const base = `
       SELECT
         d.id, d.title, d.description, d.file_name, d.file_type, d.document_type,
         d.status, d.project_id,
         p.name AS project_name,
         u.name AS uploaded_by,
-        d.uploaded_at AS created_at
+        d.uploaded_at AS created_at,
+        ($ROLE_PARAM = true OR EXISTS (
+          SELECT 1 FROM project_members pm
+          WHERE pm.project_id = d.project_id AND pm.user_id = $UID
+            AND pm.project_role = 'manager'
+        )) AS can_edit
       FROM documents d
       LEFT JOIN users u ON d.uploaded_by = u.id
       LEFT JOIN projects p ON d.project_id = p.id
     `;
 
-    const sql = isAdmin
-      ? `${base} ORDER BY d.uploaded_at DESC`
-      : `${base}
+    let sql: string;
+    let params: any[];
+    if (isAdmin) {
+      sql = `${base.replace('$ROLE_PARAM', 'true').replace('$UID', '$1')} ORDER BY d.uploaded_at DESC`;
+      params = [req.user.id];
+    } else {
+      sql = `${base.replace('$ROLE_PARAM', 'false').replace('$UID', '$1')}
          WHERE d.project_id IN (
            SELECT project_id FROM project_members WHERE user_id = $1
          )
          ORDER BY d.uploaded_at DESC`;
+      params = [req.user.id];
+    }
 
-    const result = await query(sql, isAdmin ? [] : [req.user.id]);
+    const result = await query(sql, params);
 
     return res.json({
       success: true,
@@ -483,6 +496,93 @@ export const deleteDocument = async (req: Request, res: Response) => {
       success: false,
       error: 'Internal server error',
     });
+  }
+};
+
+// Edit a document's title / description / project (admin or project manager).
+export const updateDocument = async (req: Request, res: Response) => {
+  try {
+    const { documentId } = req.params;
+    const { title, description, project_id } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const docResult = await query(
+      `SELECT id, project_id FROM documents WHERE id = $1`,
+      [documentId]
+    );
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Document not found' });
+    }
+    const document = docResult.rows[0];
+
+    const isAdmin = req.user.system_role === 'admin';
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [document.project_id, req.user.id]
+    );
+    const isManager = accessResult.rows[0]?.project_role === 'manager';
+    if (!isAdmin && !isManager) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only admins and project managers can edit documents',
+      });
+    }
+
+    // Moving to another project: a non-admin manager must also manage the
+    // destination project.
+    const changingProject =
+      project_id !== undefined && Number(project_id) !== Number(document.project_id);
+    if (changingProject && !isAdmin) {
+      const dest = await query(
+        `SELECT project_role FROM project_members WHERE project_id = $1 AND user_id = $2`,
+        [project_id, req.user.id]
+      );
+      if (dest.rows[0]?.project_role !== 'manager') {
+        return res.status(403).json({
+          success: false,
+          error: 'You can only move a document to a project you manage',
+        });
+      }
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let i = 1;
+    if (title !== undefined) {
+      updates.push(`title = $${i++}`);
+      values.push(String(title).trim());
+    }
+    if (description !== undefined) {
+      updates.push(`description = $${i++}`);
+      values.push(description || null);
+    }
+    if (changingProject) {
+      updates.push(`project_id = $${i++}`);
+      values.push(project_id);
+    }
+    if (updates.length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+    values.push(documentId);
+
+    const result = await query(
+      `UPDATE documents SET ${updates.join(', ')} WHERE id = $${i}
+       RETURNING id, title, description, project_id`,
+      values
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Document updated successfully',
+    });
+  } catch (error) {
+    console.error('Update document error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };
 

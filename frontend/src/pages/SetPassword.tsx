@@ -48,8 +48,13 @@ export const SetPassword: React.FC = () => {
     setIsSaving(true);
     try {
       await client.post('/auth/set-password', { token, password });
+      // Clear any existing session (e.g. an admin who generated the link) so the
+      // person lands on a fresh login page, not signed into another account.
+      localStorage.removeItem('auth');
       setStatus('done');
-      setTimeout(() => navigate('/login'), 1600);
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1600);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Could not set your password.');
     } finally {

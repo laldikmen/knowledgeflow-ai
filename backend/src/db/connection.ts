@@ -6,8 +6,17 @@ dotenv.config();
 
 // Return DATE columns (OID 1082) as the raw 'YYYY-MM-DD' string instead of a
 // timezone-shifted Date object, so a deadline never lands on the wrong day.
-// (TIMESTAMP columns are unaffected and keep their instant semantics.)
 types.setTypeParser(1082, (value) => value);
+
+// TIMESTAMP columns (OID 1114, "timestamp without time zone") hold UTC wall-clock
+// values because our DB session runs in UTC. node-postgres would otherwise parse
+// them in the server process's LOCAL zone, shifting every stored instant by the
+// local offset (e.g. a 10:49 event rendered as 07:49). Parse them explicitly as
+// UTC so the resulting Date is the correct instant and serializes with a trailing
+// 'Z', letting the frontend convert to the viewer's local time.
+types.setTypeParser(1114, (value) =>
+  value ? new Date(`${value.replace(' ', 'T')}Z`) : value,
+);
 
 let pool: Pool;
 

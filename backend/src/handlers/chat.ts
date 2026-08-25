@@ -208,6 +208,15 @@ Rules:
         }))
       : [];
 
+    // Swap numeric references ("[Document 1]") for the document's real name so
+    // the inline citations read the same as the Sources list.
+    if (answeredFromDocs) {
+      answer = answer.replace(/\[?\bDocument\s+(\d+)\b\]?/gi, (full, num) => {
+        const idx = parseInt(num, 10) - 1;
+        return idx >= 0 && idx < relevantDocs.length ? `[${relevantDocs[idx].title}]` : full;
+      });
+    }
+
     // Resolve the conversation this message belongs to. If the client passed a
     // conversation_id it owns, append to it; otherwise start a new conversation
     // and give it an AI-generated 2-3 word title from this first question.

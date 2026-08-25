@@ -45,11 +45,41 @@ async function findRelevantDocuments(projectId: number, userId: number, userRole
       };
     });
 
-    // Return top 3 most relevant documents
-    return scoredDocs.sort((a, b) => b.similarity - a.similarity).slice(0, 3);
+    // Only keep documents that actually matched the question's keywords, then
+    // take the top 3. Without the similarity filter we'd fall back to whatever
+    // was uploaded most recently and present it as a "source" for an answer it
+    // had nothing to do with.
+    return scoredDocs
+      .filter(doc => doc.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 3);
   } catch (error) {
     console.error('Find relevant documents error:', error);
     return [];
+  }
+}
+
+// Ask the model for a short 2-3 word title summarising a conversation's topic,
+// derived from its first question. Falls back to the first few words of the
+// question if the model call fails or returns something unusable.
+async function generateChatTitle(question: string): Promise<string> {
+  const fallback = () => {
+    const w = question.trim().replace(/[?.!]+$/, '').split(/\s+/).slice(0, 3).join(' ');
+    return (w.length > 32 ? w.slice(0, 32).trim() : w) || 'New chat';
+  };
+  try {
+    const prompt = `Summarize the topic of this question as a short title of 2 to 3 words. Use Title Case. No quotes, no punctuation, no trailing period. Return ONLY the title.\n\nQuestion: ${question}`;
+    const raw = await callBedrock(prompt, 20);
+    const cleaned = (raw || '')
+      .replace(/["'`]/g, '')
+      .replace(/[\n\r]+/g, ' ')
+      .replace(/[.?!]+$/, '')
+      .trim();
+    const words = cleaned.split(/\s+/).filter(Boolean).slice(0, 4).join(' ');
+    if (words.length < 2) return fallback();
+    return words.length > 36 ? words.slice(0, 36).trim() : words;
+  } catch {
+    return fallback();
   }
 }
 
@@ -143,41 +173,89 @@ Question: ${question}
 
 Rules:
 - If the documents above do not contain enough information to answer, reply with EXACTLY this sentence and nothing else: "${NO_INFO_MESSAGE}"
-- Otherwise, answer concisely and cite which document(s) you used.`;
+- Otherwise, answer concisely. For every fact you state, cite the document it came from by its number in square brackets, e.g. [Document 1]. Only cite documents you actually used.`;
 
       // Call Bedrock to generate a grounded answer.
       answer = await callBedrock(context);
     }
 
-    // When the answer is the "not found" message, there is nothing to cite — so
-    // don't attach or store any sources.
+    // When the answer is the "not found" message, there is nothing to cite.
     const answeredFromDocs = answer.trim() !== NO_INFO_MESSAGE;
+
+    // Figure out which of the retrieved documents the model actually cited
+    // (by "[Document N]" / "Document N"), and list only those as sources — so
+    // the Sources reflect what the answer used, not everything we retrieved.
+    const citedNumbers = new Set<number>();
+    const citeRegex = /Document\s+(\d+)/gi;
+    let citeMatch: RegExpExecArray | null;
+    while ((citeMatch = citeRegex.exec(answer)) !== null) {
+      const n = parseInt(citeMatch[1], 10);
+      if (n >= 1 && n <= relevantDocs.length) citedNumbers.add(n);
+    }
+    // If the model cited specific documents, keep only those; otherwise fall
+    // back to the retrieved (keyword-matched) set.
+    const usedDocs = citedNumbers.size > 0
+      ? relevantDocs.filter((_, index) => citedNumbers.has(index + 1))
+      : relevantDocs;
+
     const sources = answeredFromDocs
-      ? relevantDocs.map(doc => ({
+      ? usedDocs.map(doc => ({
           document_id: doc.id,
           document_title: doc.title,
           excerpt: doc.text.substring(0, 200),
         }))
       : [];
 
-    // Store conversation in chat_messages
+    // Resolve the conversation this message belongs to. If the client passed a
+    // conversation_id it owns, append to it; otherwise start a new conversation
+    // and give it an AI-generated 2-3 word title from this first question.
+    let conversationId: number | null = null;
+    let conversationTitle = '';
+    const rawConvId = Number(req.body.conversation_id);
+    if (Number.isInteger(rawConvId) && rawConvId > 0) {
+      const owned = await query(
+        `SELECT id, title FROM chat_conversations
+         WHERE id = $1 AND project_id = $2 AND user_id = $3`,
+        [rawConvId, projectId, req.user.id]
+      );
+      if (owned.rows.length > 0) {
+        conversationId = owned.rows[0].id;
+        conversationTitle = owned.rows[0].title;
+      }
+    }
+    if (!conversationId) {
+      conversationTitle = await generateChatTitle(question);
+      const convIns = await query(
+        `INSERT INTO chat_conversations (project_id, user_id, title)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [projectId, req.user.id, conversationTitle]
+      );
+      conversationId = convIns.rows[0].id;
+    }
+
+    // Store the message under its conversation and bump the conversation's
+    // updated_at so the history sidebar orders most-recent first.
     const chatResult = await query(
-      `INSERT INTO chat_messages (project_id, user_id, question, answer, sources_json)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO chat_messages (project_id, user_id, conversation_id, question, answer, sources_json)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, created_at`,
       [
         projectId,
         req.user.id,
+        conversationId,
         question,
         answer,
         JSON.stringify(sources.map(s => ({ id: s.document_id, title: s.document_title }))),
       ]
     );
+    await query(`UPDATE chat_conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 
     return res.json({
       success: true,
       data: {
         chat_id: chatResult.rows[0].id,
+        conversation_id: conversationId,
+        conversation_title: conversationTitle,
         question,
         answer,
         sources,
@@ -328,5 +406,100 @@ export const getProjectChatHistory = async (req: Request, res: Response) => {
       success: false,
       error: 'Internal server error',
     });
+  }
+};
+
+// List the caller's conversations for a project (for the history sidebar). One
+// row per conversation — not per message — newest activity first.
+export const listConversations = async (req: Request, res: Response) => {
+  try {
+    const projectIdNum = parseInt(req.params.projectId as string);
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const accessResult = await query(
+      `SELECT pm.project_role FROM project_members pm
+       WHERE pm.project_id = $1 AND pm.user_id = $2`,
+      [projectIdNum, req.user.id]
+    );
+    if (accessResult.rows.length === 0 && req.user.system_role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Access denied to this project' });
+    }
+
+    const result = await query(
+      `SELECT c.id, c.title, c.created_at, c.updated_at,
+              COUNT(m.id) AS message_count
+       FROM chat_conversations c
+       LEFT JOIN chat_messages m ON m.conversation_id = c.id
+       WHERE c.project_id = $1 AND c.user_id = $2
+       GROUP BY c.id
+       ORDER BY c.updated_at DESC
+       LIMIT 100`,
+      [projectIdNum, req.user.id]
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows.map(row => ({
+        id: row.id,
+        title: row.title,
+        message_count: Number(row.message_count),
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    console.error('List conversations error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Return all messages in one of the caller's conversations, oldest first.
+export const getConversationMessages = async (req: Request, res: Response) => {
+  try {
+    const projectIdNum = parseInt(req.params.projectId as string);
+    const conversationId = parseInt(req.params.conversationId as string);
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    // The conversation must belong to this user in this project.
+    const conv = await query(
+      `SELECT id, title FROM chat_conversations
+       WHERE id = $1 AND project_id = $2 AND user_id = $3`,
+      [conversationId, projectIdNum, req.user.id]
+    );
+    if (conv.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    const msgs = await query(
+      `SELECT id, question, answer, sources_json, created_at
+       FROM chat_messages
+       WHERE conversation_id = $1
+       ORDER BY created_at ASC`,
+      [conversationId]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        id: conv.rows[0].id,
+        title: conv.rows[0].title,
+        messages: msgs.rows.map(row => ({
+          id: row.id,
+          question: row.question,
+          answer: row.answer,
+          sources: row.sources_json
+            ? (typeof row.sources_json === 'string' ? JSON.parse(row.sources_json) : row.sources_json)
+            : [],
+          created_at: row.created_at,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Get conversation messages error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 };

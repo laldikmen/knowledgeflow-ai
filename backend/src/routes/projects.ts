@@ -3,6 +3,8 @@ import {
   getAccessibleProjects,
   getProjectDetail,
   createProject,
+  updateProject,
+  deleteProject,
   addProjectMember,
   removeProjectMember,
 } from '../handlers/projects';
@@ -21,6 +23,12 @@ router.post('/', createProject);
 
 // Get project details
 router.get('/:projectId', requireProjectAccess, getProjectDetail);
+
+// Update a project (admin only)
+router.put('/:projectId', requireProjectAccess, updateProject);
+
+// Delete a project (admin only)
+router.delete('/:projectId', requireProjectAccess, deleteProject);
 
 // Add member to project
 router.post('/:projectId/members', requireProjectAccess, addProjectMember);

@@ -496,3 +496,117 @@ export const removeProjectMember = async (req: Request, res: Response) => {
     });
   }
 };
+
+// Update a project's editable fields (name / department / description).
+// System admins only.
+export const updateProject = async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const { name, department_name, description } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (req.user.system_role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can edit a project',
+      });
+    }
+
+    const existing = await query('SELECT id FROM projects WHERE id = $1', [projectId]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    // Build a dynamic update from whichever fields were provided. Name, if sent,
+    // must not be blank.
+    const fields: string[] = [];
+    const values: any[] = [];
+    let i = 1;
+    if (name !== undefined) {
+      if (!String(name).trim()) {
+        return res.status(400).json({ success: false, error: 'Project name cannot be empty' });
+      }
+      fields.push(`name = $${i++}`);
+      values.push(String(name).trim());
+    }
+    if (department_name !== undefined) {
+      fields.push(`department_name = $${i++}`);
+      values.push(department_name ? String(department_name).trim() : null);
+    }
+    if (description !== undefined) {
+      fields.push(`description = $${i++}`);
+      values.push(description ? String(description).trim() : null);
+    }
+    if (fields.length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update' });
+    }
+
+    values.push(projectId);
+    const result = await query(
+      `UPDATE projects SET ${fields.join(', ')}, updated_at = NOW()
+       WHERE id = $${i}
+       RETURNING id, name, department_name, description`,
+      values
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+      message: 'Project updated successfully',
+    });
+  } catch (error) {
+    console.error('Update project error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};
+
+// Permanently delete a project. System admins only. Removes the project's
+// document files from S3, then deletes the project row — related members,
+// documents, tasks and chat cascade via ON DELETE CASCADE.
+export const deleteProject = async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (req.user.system_role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can delete a project',
+      });
+    }
+
+    const existing = await query('SELECT id FROM projects WHERE id = $1', [projectId]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    // Best-effort: delete the project's document files from S3 before the DB rows
+    // cascade away. A failure here shouldn't block deleting the project.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const AWS = require('aws-sdk');
+      const s3 = new AWS.S3({ region: process.env.S3_REGION || 'eu-central-1' });
+      const bucket = process.env.S3_BUCKET || 'knowledgeflow-documents';
+      const docs = await query(
+        'SELECT s3_key FROM documents WHERE project_id = $1 AND s3_key IS NOT NULL',
+        [projectId]
+      );
+      for (const doc of docs.rows) {
+        await s3.deleteObject({ Bucket: bucket, Key: doc.s3_key }).promise();
+      }
+    } catch (s3Error) {
+      console.error('Project delete: S3 cleanup failed (continuing):', s3Error);
+    }
+
+    await query('DELETE FROM projects WHERE id = $1', [projectId]);
+
+    return res.json({ success: true, message: 'Project deleted successfully' });
+  } catch (error) {
+    console.error('Delete project error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};

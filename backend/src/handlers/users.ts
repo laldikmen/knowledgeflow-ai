@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import { createAuthToken } from '../utils/authTokens';
+import { emailEnabled, sendInviteEmail } from '../utils/email';
 
 // List all users. Available to any authenticated user because task-owner
 // assignment dropdowns (used by managers) need it. Management actions below
@@ -94,12 +95,23 @@ export const createUser = async (req: Request, res: Response) => {
     );
     const newUser = result.rows[0];
 
-    // Invite link valid for 72 hours (shown to the admin; emailed in production).
+    // Invite link valid for 72 hours.
     const { link } = await createAuthToken(newUser.id, 'invite', 72);
+
+    // In production, email the invite to the new user and don't expose the link
+    // in the response. In local/demo mode, return the link so the admin can hand
+    // it over manually. `emailed` tells the frontend which message to show.
+    if (emailEnabled()) {
+      await sendInviteEmail(newUser.email, newUser.name, link);
+      return res.status(201).json({
+        success: true,
+        data: { ...newUser, emailed: true },
+      });
+    }
 
     return res.status(201).json({
       success: true,
-      data: { ...newUser, invite_link: link },
+      data: { ...newUser, invite_link: link, emailed: false },
     });
   } catch (error) {
     console.error('Create user error:', error);

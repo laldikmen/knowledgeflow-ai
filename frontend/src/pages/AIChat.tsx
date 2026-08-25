@@ -16,20 +16,23 @@ interface ChatMessage {
   unavailable?: boolean;
 }
 
+// A ChatSession mirrors one backend conversation. `conversationId` is null only
+// for a brand-new, not-yet-sent chat; `loaded` tracks whether its messages have
+// been fetched (they load lazily when the conversation is opened).
 interface ChatSession {
   id: number;
+  conversationId: number | null;
   projectId: string;
   title: string;
   time: string;
   messages: ChatMessage[];
+  loaded: boolean;
 }
 
 interface ChatProject {
   id: string;
   name: string;
 }
-
-const initialSessions: ChatSession[] = [];
 
 // Render a line's inline markdown: **bold** and [Document N] citation chips.
 const renderInline = (text: string, keyBase: string): React.ReactNode[] => {
@@ -117,13 +120,52 @@ const MarkdownAnswer: React.FC<{ text: string }> = ({ text }) => {
   return <>{blocks}</>;
 };
 
-const createSessionTitle = (question: string) =>
-  question.length > 34 ? `${question.slice(0, 34).trim()}…` : question;
+const parseSources = (raw: any): ChatSource[] => {
+  let arr = raw;
+  if (typeof raw === 'string') {
+    try { arr = JSON.parse(raw); } catch { return []; }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((s: any) => ({ title: s.title || s.document_title, meta: s.meta || s.excerpt }))
+    .filter((s: ChatSource) => !!s.title);
+};
+
+// Short, human label for when a conversation was last active.
+const formatWhen = (iso?: string): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Flatten a backend conversation's messages into the alternating user/assistant
+// bubbles the thread renders.
+const toMessages = (rows: any[]): ChatMessage[] => {
+  const out: ChatMessage[] = [];
+  rows.forEach((row) => {
+    const rid = Number(row.id);
+    out.push({ id: rid * 2, type: 'user', content: row.question || '' });
+    out.push({
+      id: rid * 2 + 1,
+      type: 'assistant',
+      content: row.answer || '',
+      sources: parseSources(row.sources),
+      unavailable: false,
+    });
+  });
+  return out;
+};
 
 export const AIChat: React.FC = () => {
-  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<number>(1);
+  const [activeSessionId, setActiveSessionId] = useState<number>(0);
   const [selectedProject, setSelectedProject] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -133,164 +175,141 @@ export const AIChat: React.FC = () => {
     const fetchProjects = async () => {
       try {
         const response = await client.get('/projects');
-        const projectsData = response.data.map((proj: any) => ({
+        const projectsData = (response.data as any[]).map((proj: any) => ({
           id: proj.id.toString(),
           name: proj.name,
         }));
         setProjects(projectsData);
-        if (projectsData.length > 0) {
-          setSelectedProject(projectsData[0].id);
-        }
+        if (projectsData.length > 0) setSelectedProject(projectsData[0].id);
       } catch (error) {
         console.error('Failed to load projects', error);
         setProjects([]);
       }
     };
-
     fetchProjects();
   }, []);
 
-  // Load this user's persisted chat history for the selected project so past
-  // conversations survive reloads (backend returns only the caller's own).
+  // Fetch and cache the messages for one conversation the first time it's opened.
+  const loadMessagesFor = async (session: ChatSession) => {
+    if (session.loaded || !session.conversationId) return;
+    try {
+      const res = await client.get(
+        `/ai/chat/${session.projectId}/conversations/${session.conversationId}`,
+      );
+      const data: any = res.data;
+      const msgs = toMessages(Array.isArray(data?.messages) ? data.messages : []);
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === session.id
+            ? { ...s, messages: msgs, loaded: true, title: data?.title || s.title }
+            : s,
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to load conversation', error);
+    }
+  };
+
+  // Load this user's conversations (one row each — not one per message) for the
+  // selected project whenever the scope changes.
   useEffect(() => {
     if (!selectedProject) return;
 
-    const loadHistory = async () => {
+    const loadConversations = async () => {
       try {
-        const response = await client.get(`/ai/chat/${selectedProject}/my-history`);
+        const response = await client.get(`/ai/chat/${selectedProject}/conversations`);
         const rows: any[] = Array.isArray(response.data) ? response.data : [];
+        const loaded: ChatSession[] = rows.map((row) => ({
+          id: Number(row.id),
+          conversationId: Number(row.id),
+          projectId: selectedProject,
+          title: row.title || 'Conversation',
+          time: formatWhen(row.updated_at || row.created_at),
+          messages: [],
+          loaded: false,
+        }));
 
-        const parseSources = (raw: any): ChatSource[] => {
-          let arr = raw;
-          if (typeof raw === 'string') {
-            try { arr = JSON.parse(raw); } catch { return []; }
-          }
-          if (!Array.isArray(arr)) return [];
-          return arr
-            .map((s: any) => ({
-              title: s.title || s.document_title,
-              meta: s.meta || s.excerpt,
-            }))
-            .filter((s: ChatSource) => !!s.title);
-        };
-
-        const loaded: ChatSession[] = rows.map((row) => {
-          const rid = Number(row.id);
-          return {
-            id: rid,
-            projectId: selectedProject,
-            title: createSessionTitle(row.question || 'Conversation'),
-            time: row.created_at
-              ? new Date(row.created_at).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                })
-              : '',
-            messages: [
-              { id: rid * 2, type: 'user', content: row.question || '' },
-              {
-                id: rid * 2 + 1,
-                type: 'assistant',
-                content: row.answer || '',
-                sources: parseSources(row.sources),
-              },
-            ],
-          };
-        });
-        // Newest first.
-        loaded.sort((a, b) => b.id - a.id);
-
-        // Replace this project's sessions with the loaded history; keep any other project's.
         setSessions((prev) => [
           ...loaded,
           ...prev.filter((s) => s.projectId !== selectedProject),
         ]);
-        setActiveSessionId(loaded[0]?.id ?? 0);
+
+        if (loaded[0]) {
+          setActiveSessionId(loaded[0].id);
+          loadMessagesFor(loaded[0]);
+        } else {
+          setActiveSessionId(0);
+        }
       } catch (error) {
-        console.error('Failed to load chat history', error);
+        console.error('Failed to load conversations', error);
       }
     };
 
-    loadHistory();
+    loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject]);
 
   const selectedProjectName = useMemo(
-    () => projects.find(project => project.id === selectedProject)?.name ?? '',
+    () => projects.find((project) => project.id === selectedProject)?.name ?? '',
     [projects, selectedProject],
   );
 
   const projectSessions = useMemo(
-    () => sessions.filter(session => session.projectId === selectedProject),
+    () => sessions.filter((session) => session.projectId === selectedProject),
     [sessions, selectedProject],
   );
 
   const activeSession = useMemo(
-    () => projectSessions.find(session => session.id === activeSessionId) ?? null,
+    () => projectSessions.find((session) => session.id === activeSessionId) ?? null,
     [projectSessions, activeSessionId],
   );
 
   const messages = activeSession?.messages ?? [];
 
   useEffect(() => {
-    if (activeSession) return;
-
-    const firstSession = projectSessions[0];
-    if (firstSession) {
-      setActiveSessionId(firstSession.id);
-      return;
-    }
-
-    setActiveSessionId(0);
-  }, [activeSession, projectSessions]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
-
-  const fetchAssistantResponse = async (
-    question: string,
-    projectId: string,
-  ): Promise<Omit<ChatMessage, 'id' | 'type'>> => {
-    try {
-      const response = await client.post(`/ai/chat/${projectId}`, {
-        question,
-      });
-
-      const data = response.data.data ?? response.data;
-      const sources: ChatSource[] = Array.isArray(data.sources)
-        ? data.sources
-            .map((s: any) => ({
-              title: s.document_title || s.title,
-              meta: s.excerpt || s.meta,
-            }))
-            .filter((s: ChatSource) => !!s.title)
-        : [];
-      return {
-        content: data.answer || data.content,
-        sources,
-        unavailable: false,
-      };
-    } catch (error) {
-      console.error('Failed to get AI response:', error);
-      return {
-        content: 'I could not process your question at this time. Please try again.',
-        unavailable: true,
-      };
-    }
-  };
 
   const handleProjectChange = (projectId: string) => {
     setSelectedProject(projectId);
     setInputValue('');
     setIsLoading(false);
-
-    const firstSessionForProject = sessions.find(session => session.projectId === projectId);
-    setActiveSessionId(firstSessionForProject?.id ?? 0);
   };
 
   const handleSelectSession = (sessionId: number) => {
     setActiveSessionId(sessionId);
+    setInputValue('');
+    setIsLoading(false);
+    const target = sessions.find((s) => s.id === sessionId);
+    if (target) loadMessagesFor(target);
+  };
+
+  const handleNewChat = () => {
+    // Reuse an existing empty draft rather than stacking blank chats.
+    const existingDraft = projectSessions.find(
+      (s) => s.conversationId === null && s.messages.length === 0,
+    );
+    if (existingDraft) {
+      setActiveSessionId(existingDraft.id);
+      setInputValue('');
+      setIsLoading(false);
+      return;
+    }
+
+    const tempId = -Date.now();
+    setSessions((prev) => [
+      {
+        id: tempId,
+        conversationId: null,
+        projectId: selectedProject,
+        title: 'New chat',
+        time: 'Just now',
+        messages: [],
+        loaded: true,
+      },
+      ...prev,
+    ]);
+    setActiveSessionId(tempId);
     setInputValue('');
     setIsLoading(false);
   };
@@ -299,98 +318,76 @@ export const AIChat: React.FC = () => {
     const question = inputValue.trim();
     if (!question || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      type: 'user',
-      content: question,
-    };
-
-    let targetSessionId = activeSession?.id;
-
-    if (!targetSessionId) {
-      targetSessionId = Date.now() + 1;
-      const newSession: ChatSession = {
-        id: targetSessionId,
+    // Resolve the session to post into — create a fresh draft if none is active.
+    let session = activeSession;
+    let sessionKey = session?.id;
+    if (!session) {
+      sessionKey = -Date.now();
+      session = {
+        id: sessionKey,
+        conversationId: null,
         projectId: selectedProject,
-        title: createSessionTitle(question),
+        title: 'New chat',
         time: 'Just now',
-        messages: [userMessage],
+        messages: [],
+        loaded: true,
       };
-
-      setSessions(previous => [
-        newSession,
-        ...previous.map(session =>
-          session.projectId === selectedProject && session.time === 'Just now'
-            ? { ...session, time: 'Earlier today' }
-            : session,
-        ),
-      ]);
-      setActiveSessionId(targetSessionId);
-    } else {
-      setSessions(previous =>
-        previous.map(session => {
-          if (session.id !== targetSessionId) return session;
-
-          const shouldRename = session.title === 'New conversation' && session.messages.length === 0;
-
-          return {
-            ...session,
-            title: shouldRename ? createSessionTitle(question) : session.title,
-            time: 'Just now',
-            messages: [...session.messages, userMessage],
-          };
-        }),
-      );
+      setSessions((prev) => [session as ChatSession, ...prev]);
+      setActiveSessionId(sessionKey);
     }
 
-    const responseSessionId = targetSessionId;
+    const conversationId = session.conversationId;
+    const userMessage: ChatMessage = { id: Date.now(), type: 'user', content: question };
 
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionKey
+          ? { ...s, messages: [...s.messages, userMessage], time: 'Just now', loaded: true }
+          : s,
+      ),
+    );
     setInputValue('');
     setIsLoading(true);
 
-    const response = await fetchAssistantResponse(question, selectedProject);
+    let answer: Omit<ChatMessage, 'id' | 'type'>;
+    let newConversationId: number | null = null;
+    let newTitle = '';
+    try {
+      const response = await client.post(`/ai/chat/${selectedProject}`, {
+        question,
+        conversation_id: conversationId ?? undefined,
+      });
+      const data = (response.data as any).data ?? response.data;
+      answer = { content: data.answer || data.content, sources: parseSources(data.sources), unavailable: false };
+      newConversationId = Number(data.conversation_id) || null;
+      newTitle = data.conversation_title || '';
+    } catch (error) {
+      console.error('Failed to get AI response:', error);
+      answer = {
+        content: 'I could not process your question at this time. Please try again.',
+        unavailable: true,
+      };
+    }
 
-    setSessions(previous =>
-      previous.map(session =>
-        session.id === responseSessionId
-          ? {
-              ...session,
-              messages: [
-                ...session.messages,
-                {
-                  id: Date.now() + 2,
-                  type: 'assistant',
-                  ...response,
-                },
-              ],
-            }
-          : session,
-      ),
+    const assistantMessage: ChatMessage = { id: Date.now() + 2, type: 'assistant', ...answer };
+
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== sessionKey) return s;
+        const promotedId = s.conversationId ? s.id : newConversationId ?? s.id;
+        return {
+          ...s,
+          id: promotedId,
+          conversationId: s.conversationId ?? newConversationId,
+          title: s.conversationId ? s.title : newTitle || s.title,
+          messages: [...s.messages, assistantMessage],
+          loaded: true,
+        };
+      }),
     );
-    setIsLoading(false);
-  };
 
-  const handleNewChat = () => {
-    const nextId = Date.now();
-
-    const newSession: ChatSession = {
-      id: nextId,
-      projectId: selectedProject,
-      title: 'New conversation',
-      time: 'Just now',
-      messages: [],
-    };
-
-    setSessions(previous => [
-      newSession,
-      ...previous.map(session =>
-        session.projectId === selectedProject && session.time === 'Just now'
-          ? { ...session, time: 'Earlier today' }
-          : session,
-      ),
-    ]);
-    setActiveSessionId(nextId);
-    setInputValue('');
+    // If this was a brand-new conversation, follow it under its real id.
+    if (!conversationId && newConversationId) setActiveSessionId(newConversationId);
     setIsLoading(false);
   };
 
@@ -410,9 +407,9 @@ export const AIChat: React.FC = () => {
             <select
               id="chat-project"
               value={selectedProject}
-              onChange={event => handleProjectChange(event.target.value)}
+              onChange={(event) => handleProjectChange(event.target.value)}
             >
-              {projects.map(project => (
+              {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
@@ -432,7 +429,7 @@ export const AIChat: React.FC = () => {
         <div className="kf-chat-history">
           <p className="kf-chat-rail-label">History</p>
           <div className="kf-chat-history-list">
-            {projectSessions.map(session => (
+            {projectSessions.map((session) => (
               <button
                 type="button"
                 key={session.id}
@@ -441,8 +438,15 @@ export const AIChat: React.FC = () => {
                 }`}
                 onClick={() => handleSelectSession(session.id)}
               >
-                <span>{session.title}</span>
-                <small>{session.time}</small>
+                <span className="kf-chat-history-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.5L3 20l1-5.6A8.5 8.5 0 1 1 21 11.5Z" />
+                  </svg>
+                </span>
+                <span className="kf-chat-history-text">
+                  <span>{session.title}</span>
+                  <small>{session.time}</small>
+                </span>
               </button>
             ))}
 
@@ -460,7 +464,7 @@ export const AIChat: React.FC = () => {
           </div>
           <div>
             <h1>Knowledge Assistant</h1>
-            <p>Searching documents in {selectedProjectName}</p>
+            <p>Grounded in the documents of {selectedProjectName || 'your project'}</p>
           </div>
         </header>
 
@@ -470,12 +474,15 @@ export const AIChat: React.FC = () => {
               <div className="kf-chat-brand-mark" aria-hidden="true">
                 <span />
               </div>
-              <h2>Start a new conversation</h2>
-              <p>Ask a question about the documents, decisions, or tasks in {selectedProjectName}.</p>
+              <h2>Ask about {selectedProjectName || 'this project'}</h2>
+              <p>
+                I answer only from the documents in this project, and cite what I used.
+                Try asking about a decision, deadline, or action item.
+              </p>
             </div>
           )}
 
-          {messages.map(message => (
+          {messages.map((message) => (
             <article
               key={message.id}
               className={`kf-chat-message kf-chat-message--${message.type}`}
@@ -488,14 +495,9 @@ export const AIChat: React.FC = () => {
                     message.unavailable ? 'kf-chat-assistant-card--compact' : ''
                   }`}
                 >
-                  {message.unavailable && (
-                    <span className="kf-chat-answer-icon" aria-hidden="true">
-                      <svg viewBox="0 0 24 24">
-                        <circle cx="11" cy="11" r="6" />
-                        <path d="m16 16 4 4" />
-                      </svg>
-                    </span>
-                  )}
+                  <span className="kf-chat-answer-avatar" aria-hidden="true">
+                    <span />
+                  </span>
 
                   <div className="kf-chat-answer-content">
                     {message.unavailable ? (
@@ -520,8 +522,8 @@ export const AIChat: React.FC = () => {
                             >
                               <span className="kf-chat-source-icon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24">
-                                  <circle cx="12" cy="12" r="7" />
-                                  <path d="M12 8v4l3 2" />
+                                  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+                                  <path d="M5 3h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
                                 </svg>
                               </span>
                               <span>
@@ -542,9 +544,14 @@ export const AIChat: React.FC = () => {
           {isLoading && (
             <article className="kf-chat-message kf-chat-message--assistant">
               <div className="kf-chat-assistant-card kf-chat-assistant-card--typing">
-                <span />
-                <span />
-                <span />
+                <span className="kf-chat-answer-avatar" aria-hidden="true">
+                  <span />
+                </span>
+                <div className="kf-chat-typing-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             </article>
           )}
@@ -556,9 +563,9 @@ export const AIChat: React.FC = () => {
           <div className="kf-chat-composer">
             <textarea
               value={inputValue}
-              onChange={event => setInputValue(event.target.value)}
+              onChange={(event) => setInputValue(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your documents..."
+              placeholder={`Ask about ${selectedProjectName || 'your documents'}…`}
               rows={1}
               aria-label="Ask about your documents"
             />
@@ -575,6 +582,9 @@ export const AIChat: React.FC = () => {
               </svg>
             </button>
           </div>
+          <p className="kf-chat-composer-hint">
+            Answers come only from this project's documents.
+          </p>
         </div>
       </div>
     </section>

@@ -15,6 +15,8 @@ export const SetPassword: React.FC = () => {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -113,24 +115,42 @@ export const SetPassword: React.FC = () => {
 
                 <div className="login-password-group">
                   <label className="input-label">New password</label>
-                  <input
-                    type="password"
-                    className="input password-input"
-                    placeholder="At least 8 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="input password-input"
+                      placeholder="At least 8 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="login-password-group">
                   <label className="input-label">Confirm password</label>
-                  <input
-                    type="password"
-                    className="input password-input"
-                    placeholder="Re-enter your password"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                  />
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showConfirm ? 'text' : 'password'}
+                      className="input password-input"
+                      placeholder="Re-enter your password"
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                    >
+                      {showConfirm ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
 
                 <Button

@@ -161,15 +161,30 @@ CREATE TABLE task_notes (
 CREATE INDEX idx_task_notes_task ON task_notes(task_id);
 
 -- Chat messages table
+-- A chat conversation groups related question/answer messages and carries a
+-- short AI-generated title shown in the history sidebar.
+CREATE TABLE chat_conversations (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT 'New chat',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE chat_messages (
   id SERIAL PRIMARY KEY,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  conversation_id INTEGER REFERENCES chat_conversations(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
   sources_json JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX idx_chat_conversations_project_user ON chat_conversations(project_id, user_id);
+CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id);
 
 -- Create indexes for performance
 CREATE INDEX idx_project_members_user ON project_members(user_id);

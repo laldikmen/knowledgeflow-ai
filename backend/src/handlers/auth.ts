@@ -8,6 +8,7 @@ import {
   findValidToken,
   markTokenUsed,
 } from '../utils/authTokens';
+import { emailEnabled, sendResetEmail } from '../utils/email';
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -182,15 +183,23 @@ export const forgotPassword = async (req: Request, res: Response) => {
     if (!email) return res.json(generic);
 
     const userResult = await query(
-      `SELECT id FROM users WHERE email = $1 AND account_status <> 'inactive'`,
+      `SELECT id, name, email FROM users WHERE email = $1 AND account_status <> 'inactive'`,
       [String(email).trim().toLowerCase()],
     );
     if (userResult.rows.length === 0) return res.json(generic);
 
-    const { link } = await createAuthToken(userResult.rows[0].id, 'reset', 1);
-    console.log(`[password reset] link for ${email}: ${link}`);
+    const user = userResult.rows[0];
+    const { link } = await createAuthToken(user.id, 'reset', 1);
 
-    // DEMO / link-shown mode only — remove `reset_link` once emails are wired up.
+    // When email is enabled (production), send the link and return nothing else,
+    // so the reset link is never exposed in the API response. When disabled
+    // (local/demo), fall back to returning the link for hands-on testing.
+    if (emailEnabled()) {
+      await sendResetEmail(user.email, user.name, link);
+      return res.json(generic);
+    }
+
+    console.log(`[password reset] link for ${email}: ${link}`);
     return res.json({ ...generic, reset_link: link });
   } catch (error) {
     console.error('Forgot password error:', error);

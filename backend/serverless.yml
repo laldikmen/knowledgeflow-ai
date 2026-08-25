@@ -52,6 +52,11 @@ provider:
           Resource: "*"
         - Effect: Allow
           Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+        - Effect: Allow
+          Action:
             - secretsmanager:GetSecretValue
           Resource:
             - arn:aws:secretsmanager:${self:provider.region}:*:secret:knowledgeflow/*
@@ -67,6 +72,12 @@ provider:
     JWT_SECRET: ${env:JWT_SECRET, 'dev-secret'}
     S3_BUCKET: ${env:S3_BUCKET, 'knowledgeflow-ai-dev'}
     S3_REGION: ${env:S3_REGION, 'eu-central-1'}
+    # Email (Amazon SES). EMAIL_ENABLED=true turns on real delivery; the sender
+    # must be a verified SES identity in SES_REGION. FRONTEND_URL builds the link.
+    EMAIL_ENABLED: ${env:EMAIL_ENABLED, 'false'}
+    EMAIL_FROM: ${env:EMAIL_FROM, 'no-reply@knowledgeflow.ai'}
+    SES_REGION: ${env:SES_REGION, 'eu-central-1'}
+    FRONTEND_URL: ${env:FRONTEND_URL, 'http://localhost:5173'}
 
 functions:
   api:

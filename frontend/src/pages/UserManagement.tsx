@@ -96,6 +96,7 @@ export const UserManagement: React.FC = () => {
     name: string;
     email: string;
     link: string;
+    emailed: boolean;
   } | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -287,6 +288,7 @@ export const UserManagement: React.FC = () => {
         name: pendingCreate.fullName,
         email: pendingCreate.email,
         link: created.data?.invite_link || '',
+        emailed: Boolean(created.data?.emailed),
       });
       setPendingCreate(null);
       setEditingUserId(null);
@@ -670,32 +672,43 @@ export const UserManagement: React.FC = () => {
               </div>
             </header>
 
-            <p className="user-management-invite-copy">
-              Send <strong>{inviteResult.email}</strong> this link to set their
-              password and activate their account. It expires in 72 hours.
-            </p>
+            {inviteResult.emailed ? (
+              <p className="user-management-invite-copy">
+                An invite email has been sent to{' '}
+                <strong>{inviteResult.email}</strong> with a link to set their
+                password and activate their account. It expires in 72 hours.
+              </p>
+            ) : (
+              <>
+                <p className="user-management-invite-copy">
+                  Send <strong>{inviteResult.email}</strong> this link to set
+                  their password and activate their account. It expires in 72
+                  hours.
+                </p>
 
-            <div className="user-management-invite-link">
-              <input readOnly value={inviteResult.link} onFocus={(e) => e.target.select()} />
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(inviteResult.link);
-                    setInviteCopied(true);
-                  } catch {
-                    setInviteCopied(false);
-                  }
-                }}
-              >
-                {inviteCopied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
+                <div className="user-management-invite-link">
+                  <input readOnly value={inviteResult.link} onFocus={(e) => e.target.select()} />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(inviteResult.link);
+                        setInviteCopied(true);
+                      } catch {
+                        setInviteCopied(false);
+                      }
+                    }}
+                  >
+                    {inviteCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
 
-            <p className="user-management-invite-note">
-              In production this link is emailed automatically. For now, share it
-              directly.
-            </p>
+                <p className="user-management-invite-note">
+                  In production this link is emailed automatically. For now,
+                  share it directly.
+                </p>
+              </>
+            )}
 
             <div
               className="user-management-modal-actions"

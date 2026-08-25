@@ -109,6 +109,12 @@ const normalizedRoleAllowsMemberManagement = (role: string) => {
   ].includes(normalized);
 };
 
+// Editing/deleting a whole project is restricted to system administrators.
+const isSystemAdmin = (role: string) =>
+  ['system administrator', 'administrator', 'admin'].includes(
+    (role || '').trim().toLowerCase(),
+  );
+
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   currentUserRole = 'Viewer',
   currentUserName = 'User',
@@ -125,6 +131,16 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [newMemberUserId, setNewMemberUserId] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<MemberRole>('Contributor');
   const [memberError, setMemberError] = useState('');
+
+  // Edit-project modal (system admins only).
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', department_name: '', description: '' });
+  const [editError, setEditError] = useState('');
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+
+  const canEditProject = isSystemAdmin(currentUserRole);
 
   const loadProject = async () => {
       setIsLoading(true);
@@ -318,6 +334,53 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       await loadProject();
     } catch (error) {
       console.error('Failed to remove member', error);
+    }
+  };
+
+  // Open the edit modal pre-filled with the project's current details.
+  const openEditProject = () => {
+    if (!project) return;
+    setEditForm({
+      name: project.name || '',
+      department_name: project.department && project.department !== '—' ? project.department : '',
+      description: project.description || '',
+    });
+    setEditError('');
+    setShowDeleteConfirm(false);
+    setIsEditOpen(true);
+  };
+
+  const handleSaveProject = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setEditError('');
+    if (!editForm.name.trim()) {
+      setEditError('Project name is required.');
+      return;
+    }
+    setIsSavingProject(true);
+    try {
+      await client.put(`/projects/${projectId}`, {
+        name: editForm.name.trim(),
+        department_name: editForm.department_name.trim() || null,
+        description: editForm.description.trim() || null,
+      });
+      await loadProject();
+      setIsEditOpen(false);
+    } catch (error: any) {
+      setEditError(error.response?.data?.error || 'Could not save the project.');
+    } finally {
+      setIsSavingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    setIsDeletingProject(true);
+    try {
+      await client.delete(`/projects/${projectId}`);
+      navigate('/projects');
+    } catch (error: any) {
+      setEditError(error.response?.data?.error || 'Could not delete the project.');
+      setIsDeletingProject(false);
     }
   };
 
@@ -736,6 +799,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               Manage members
             </button>
           )}
+
+          {canEditProject && (
+            <button
+              type="button"
+              className="project-detail-edit-button"
+              onClick={openEditProject}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              Edit project
+            </button>
+          )}
         </div>
       </header>
 
@@ -827,6 +904,125 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <button type="button" onClick={() => setIsMemberPanelOpen(false)}>
                 Done
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {isEditOpen && canEditProject && (
+        <div
+          className="project-member-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isDeletingProject) setIsEditOpen(false);
+          }}
+        >
+          <section
+            className="project-member-modal project-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-project-title"
+          >
+            <div className="project-member-modal-header">
+              <div>
+                <span>Project settings</span>
+                <h2 id="edit-project-title">Edit project</h2>
+                <p>{project.name}</p>
+              </div>
+              <button
+                type="button"
+                className="project-member-modal-close"
+                onClick={() => setIsEditOpen(false)}
+                aria-label="Close edit project"
+              >
+                ×
+              </button>
+            </div>
+
+            <form className="project-edit-form" onSubmit={handleSaveProject}>
+              {editError && <div className="project-edit-error">{editError}</div>}
+
+              <label className="project-edit-field">
+                <span>Project name</span>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="Project name"
+                />
+              </label>
+
+              <label className="project-edit-field">
+                <span>Department</span>
+                <input
+                  value={editForm.department_name}
+                  onChange={(e) => setEditForm({ ...editForm, department_name: e.target.value })}
+                  placeholder="e.g. Engineering"
+                />
+              </label>
+
+              <label className="project-edit-field">
+                <span>Description</span>
+                <textarea
+                  rows={4}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="What is this project about?"
+                />
+              </label>
+
+              <div className="project-edit-actions">
+                <button
+                  type="button"
+                  className="project-edit-button project-edit-button--secondary"
+                  onClick={() => setIsEditOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="project-edit-button project-edit-button--primary"
+                  disabled={isSavingProject}
+                >
+                  {isSavingProject ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+
+            <div className="project-edit-danger">
+              {!showDeleteConfirm ? (
+                <button
+                  type="button"
+                  className="project-edit-delete-link"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  Delete this project
+                </button>
+              ) : (
+                <div className="project-edit-danger-confirm">
+                  <p>
+                    Delete <strong>{project.name}</strong>? This permanently removes its
+                    documents, tasks and chat history. This cannot be undone.
+                  </p>
+                  <div className="project-edit-danger-actions">
+                    <button
+                      type="button"
+                      className="project-edit-button project-edit-button--secondary"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={isDeletingProject}
+                    >
+                      Keep project
+                    </button>
+                    <button
+                      type="button"
+                      className="project-edit-button project-edit-button--danger"
+                      onClick={handleDeleteProject}
+                      disabled={isDeletingProject}
+                    >
+                      {isDeletingProject ? 'Deleting…' : 'Delete permanently'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         </div>

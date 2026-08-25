@@ -1235,3 +1235,172 @@
     max-height: calc(100vh - 24px);
   }
 }
+
+/* ---- Edit project button + modal ---- */
+.project-detail-edit-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 18px;
+  border: 1px solid #e2dbcf;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #33302a;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.project-detail-edit-button:hover {
+  transform: translateY(-1px);
+  border-color: #d8bd4d;
+}
+
+.project-detail-edit-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.project-edit-modal {
+  width: min(520px, 100%);
+}
+
+.project-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px;
+}
+
+.project-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.project-edit-field > span {
+  color: #6a6357;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-edit-field input,
+.project-edit-field textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #ded7cb;
+  border-radius: 11px;
+  background: #ffffff;
+  color: #302d27;
+  font: 14px/1.5 var(--sans);
+  outline: none;
+}
+
+.project-edit-field textarea {
+  resize: vertical;
+}
+
+.project-edit-field input:focus,
+.project-edit-field textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(243, 206, 75, 0.16);
+}
+
+.project-edit-error {
+  padding: 9px 12px;
+  border-left: 3px solid #d6533a;
+  border-radius: 8px;
+  background: #fff2ee;
+  color: #b24d38;
+  font-size: 13px;
+}
+
+.project-edit-actions {
+  margin-top: 2px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.project-edit-button {
+  min-height: 44px;
+  border-radius: 12px;
+  font: 700 13px/1 var(--sans);
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.project-edit-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.project-edit-button--secondary {
+  border: 1px solid #ded7cb;
+  background: #ffffff;
+  color: #3f3a32;
+}
+
+.project-edit-button--primary {
+  border: 1px solid var(--gold);
+  background: var(--gold);
+  color: #2d2923;
+}
+
+.project-edit-button--primary:hover:not(:disabled) {
+  background: #e6c13f;
+}
+
+.project-edit-button--danger {
+  border: 1px solid #d6533a;
+  background: #d6533a;
+  color: #ffffff;
+}
+
+.project-edit-button--danger:hover:not(:disabled) {
+  background: #c0492f;
+}
+
+.project-edit-danger {
+  padding: 16px 24px 22px;
+  border-top: 1px solid #eee7db;
+}
+
+.project-edit-delete-link {
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: #c0433a;
+  font: 600 13px var(--sans);
+  cursor: pointer;
+}
+
+.project-edit-delete-link:hover {
+  text-decoration: underline;
+}
+
+.project-edit-danger-confirm p {
+  margin: 0 0 12px;
+  color: #6a6357;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-edit-danger-confirm strong {
+  color: #302d27;
+}
+
+.project-edit-danger-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}

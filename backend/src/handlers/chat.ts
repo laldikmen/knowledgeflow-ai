@@ -45,12 +45,14 @@ async function findRelevantDocuments(projectId: number, userId: number, userRole
       };
     });
 
-    // Only keep documents that actually matched the question's keywords, then
-    // take the top 3. Without the similarity filter we'd fall back to whatever
-    // was uploaded most recently and present it as a "source" for an answer it
-    // had nothing to do with.
-    return scoredDocs
-      .filter(doc => doc.similarity > 0)
+    // Prefer documents that matched the question's keywords. If none matched,
+    // still pass the most-recent documents so the model can answer general
+    // questions (e.g. "summarize the key points") that share no literal words
+    // with the text. Source accuracy is handled separately: the answer only
+    // cites the documents it actually used, and an unanswerable question returns
+    // the "not found" message — so nothing is mislisted as a source either way.
+    const matched = scoredDocs.filter(doc => doc.similarity > 0);
+    return (matched.length > 0 ? matched : scoredDocs)
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 3);
   } catch (error) {

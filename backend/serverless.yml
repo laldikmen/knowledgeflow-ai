@@ -12,6 +12,11 @@ provider:
   region: ${env:AWS_REGION, 'eu-central-1'}
   stage: ${opt:stage, 'dev'}
 
+  # Let API Gateway return the report PDF as binary (base64) instead of mangling it.
+  apiGateway:
+    binaryMediaTypes:
+      - 'application/pdf'
+
   # VPC Configuration - Lambda in same VPC as RDS for secure database access
   vpc:
     securityGroupIds:

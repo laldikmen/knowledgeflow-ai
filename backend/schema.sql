@@ -22,6 +22,8 @@ CREATE TABLE auth_tokens (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash VARCHAR(64) NOT NULL,
   purpose VARCHAR(20) NOT NULL DEFAULT 'invite',
+  -- Set for 'report' tokens (shareable read-only project reports); null otherwise.
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
   expires_at TIMESTAMP NOT NULL,
   used_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW()

@@ -13,6 +13,7 @@ import userRoutes from './routes/users';
 import timelineRoutes from './routes/timeline';
 import notificationRoutes from './routes/notifications';
 import analyticsRoutes from './routes/analytics';
+import reportRoutes from './routes/reports';
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ app.use('/ai/chat', chatRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/analytics', analyticsRoutes);
+app.use('/reports', reportRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

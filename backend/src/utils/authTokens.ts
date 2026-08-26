@@ -14,6 +14,39 @@ export const hashToken = (raw: string): string =>
 export const buildSetPasswordLink = (rawToken: string): string =>
   `${FRONTEND_URL}/set-password?token=${rawToken}`;
 
+export const buildReportLink = (rawToken: string): string =>
+  `${FRONTEND_URL}/report/${rawToken}`;
+
+/**
+ * Create a shareable, read-only report token for a project. Unlike invite/reset
+ * tokens these are multi-use (viewable until they expire) and carry the project.
+ */
+export async function createReportToken(
+  userId: number,
+  projectId: number,
+  ttlHours: number,
+): Promise<{ raw: string; link: string }> {
+  const raw = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + ttlHours * 3600 * 1000);
+  await query(
+    `INSERT INTO auth_tokens (user_id, token_hash, purpose, project_id, expires_at)
+     VALUES ($1, $2, 'report', $3, $4)`,
+    [userId, hashToken(raw), projectId, expires],
+  );
+  return { raw, link: buildReportLink(raw) };
+}
+
+/** Resolve a report token to its project id (unexpired 'report' tokens only). */
+export async function findValidReportToken(raw: string): Promise<{ project_id: number } | null> {
+  if (!raw) return null;
+  const result = await query(
+    `SELECT project_id FROM auth_tokens
+     WHERE token_hash = $1 AND purpose = 'report' AND expires_at > NOW()`,
+    [hashToken(raw)],
+  );
+  return result.rows[0] || null;
+}
+
 /**
  * Create a one-time token for a user, store only its hash, and return the raw
  * token + the set-password link. Any earlier unused token of the same purpose

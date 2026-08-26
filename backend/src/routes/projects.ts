@@ -8,6 +8,7 @@ import {
   addProjectMember,
   removeProjectMember,
 } from '../handlers/projects';
+import { createReportLink } from '../handlers/reports';
 import { verifyToken, requireProjectAccess } from '../middleware/auth';
 
 const router = express.Router();
@@ -29,6 +30,9 @@ router.put('/:projectId', requireProjectAccess, updateProject);
 
 // Delete a project (admin only)
 router.delete('/:projectId', requireProjectAccess, deleteProject);
+
+// Create a shareable read-only report link (admin / project manager)
+router.post('/:projectId/report-link', requireProjectAccess, createReportLink);
 
 // Add member to project
 router.post('/:projectId/members', requireProjectAccess, addProjectMember);

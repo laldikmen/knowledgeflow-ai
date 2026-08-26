@@ -104,7 +104,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Export Lambda handler
-export const handler = serverless(app);
+// `binary` base64-encodes PDF responses so the report PDF survives API Gateway
+// (paired with provider.apiGateway.binaryMediaTypes in serverless.yml).
+export const handler = serverless(app, { binary: ['application/pdf'] });
 
 // For local development
 if (require.main === module) {

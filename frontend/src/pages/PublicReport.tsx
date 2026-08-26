@@ -39,6 +39,33 @@ export const PublicReport: React.FC = () => {
   }, [token]);
 
   const pdfUrl = `${client.defaults.baseURL}/reports/${token}/pdf`;
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  // The PDF endpoint returns binary only when the request's Accept header is
+  // exactly application/pdf (API Gateway binary-media negotiation). A plain
+  // <a href> navigation sends a text/html Accept and gets base64 text back, so
+  // we fetch with the right header and hand the browser a real blob to save.
+  const handleDownloadPdf = async () => {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const res = await fetch(pdfUrl, { headers: { Accept: 'application/pdf' } });
+      if (!res.ok) throw new Error('PDF unavailable');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(data?.project.name || 'project').replace(/[^a-z0-9]+/gi, '-')}-report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch {
+      window.open(pdfUrl, '_blank', 'noopener');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
 
   if (loading) {
     return <div className="report-page"><p className="report-status">Loading report…</p></div>;
@@ -60,10 +87,10 @@ export const PublicReport: React.FC = () => {
 
   return (
     <div className="report-page">
-      <a className="deck-pdf-fab" href={pdfUrl} target="_blank" rel="noreferrer">
+      <button className="deck-pdf-fab" type="button" onClick={handleDownloadPdf} disabled={downloadingPdf}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7.5 11.5 4.5 4.5 4.5-4.5" /><path d="M5 20h14" /></svg>
-        Download PDF
-      </a>
+        {downloadingPdf ? 'Preparing…' : 'Download PDF'}
+      </button>
 
       <div className="report-deck">
         {/* Cover slide */}

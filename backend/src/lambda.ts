@@ -11,6 +11,9 @@ import chatRoutes from './routes/chat';
 import dashboardRoutes from './routes/dashboard';
 import userRoutes from './routes/users';
 import timelineRoutes from './routes/timeline';
+import notificationRoutes from './routes/notifications';
+import analyticsRoutes from './routes/analytics';
+import reportRoutes from './routes/reports';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import serverless from 'serverless-http';
 
@@ -57,6 +60,9 @@ app.use('/timeline', timelineRoutes);
 app.use('/ai', aiRoutes);
 app.use('/ai/chat', chatRoutes);
 app.use('/dashboard', dashboardRoutes);
+app.use('/notifications', notificationRoutes);
+app.use('/analytics', analyticsRoutes);
+app.use('/reports', reportRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

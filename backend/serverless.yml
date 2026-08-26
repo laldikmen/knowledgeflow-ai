@@ -120,4 +120,10 @@ package:
     - '!node_modules/serverless/**'
     - '!node_modules/typescript/**'
     - '!node_modules/@typescript/**'
+    # Non-runtime files: TypeScript declarations and source maps are never
+    # loaded by Node at runtime but add ~85 MB. Excluding them keeps the
+    # unzipped package comfortably under Lambda's 250 MiB limit.
+    - '!node_modules/**/*.d.ts'
+    - '!node_modules/**/*.map'
+    - '!node_modules/**/*.md'
     - '!.git/**'

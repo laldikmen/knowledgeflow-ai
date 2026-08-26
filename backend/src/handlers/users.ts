@@ -299,3 +299,34 @@ export const updateUserStatus = async (req: Request, res: Response) => {
     });
   }
 };
+
+// Permanently delete a user account (admin only). References across the app are
+// ON DELETE SET NULL / CASCADE, so the user's history stays intact (shown as
+// "—"/Unassigned) while their memberships, tokens, and notifications are removed.
+// Prefer deactivation (PATCH /status) for real users; delete is for cleaning up
+// test / erroneous / never-activated accounts.
+export const deleteUser = async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    if (req.user.system_role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only administrators can delete users' });
+    }
+    const { userId } = req.params;
+    if (Number(userId) === req.user.id) {
+      return res.status(400).json({ success: false, error: 'You cannot delete your own account' });
+    }
+
+    const existing = await query('SELECT id, name FROM users WHERE id = $1', [userId]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [userId]);
+    return res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+};

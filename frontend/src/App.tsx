@@ -12,6 +12,7 @@ import { ActionTracker } from './pages/ActionTracker';
 import { TaskDetail } from './pages/TaskDetail';
 import { AIChat } from './pages/AIChat';
 import { Insights } from './pages/Insights';
+import { PublicReport } from './pages/PublicReport';
 import { Timeline } from './pages/Timeline';
 import { UserManagement } from './pages/UserManagement';
 import { Settings, type ThemePreference } from './pages/Settings';
@@ -113,12 +114,17 @@ function App() {
   // signed in (e.g. an admin opening an invite link they just created). Handle
   // them before the auth check so they always render standalone.
   const publicPath = window.location.pathname;
-  if (publicPath === '/set-password' || publicPath === '/forgot-password') {
+  if (
+    publicPath === '/set-password' ||
+    publicPath === '/forgot-password' ||
+    publicPath.startsWith('/report/')
+  ) {
     return (
       <Router>
         <Routes>
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/report/:token" element={<PublicReport />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>
@@ -192,7 +198,7 @@ function App() {
             path="/users"
             element={
               userIsAdministrator ? (
-                <UserManagement />
+                <UserManagement currentUserEmail={authUser.email} />
               ) : (
                 <Navigate to="/dashboard" replace />
               )

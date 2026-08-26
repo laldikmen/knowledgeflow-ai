@@ -142,6 +142,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const canEditProject = isSystemAdmin(currentUserRole);
 
+  // Share-report modal.
+  const [reportUrl, setReportUrl] = useState<string | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
+
   const loadProject = async () => {
       setIsLoading(true);
       try {
@@ -381,6 +386,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     } catch (error: any) {
       setEditError(error.response?.data?.error || 'Could not delete the project.');
       setIsDeletingProject(false);
+    }
+  };
+
+  // Create (or refresh) a shareable read-only report link for this project.
+  const handleShareReport = async () => {
+    setReportLoading(true);
+    setReportCopied(false);
+    try {
+      const res = await client.post(`/projects/${projectId}/report-link`);
+      setReportUrl((res.data as any)?.url || '');
+    } catch (error) {
+      console.error('Failed to create report link', error);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -800,6 +819,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </button>
           )}
 
+          {canManageMembers && (
+            <button
+              type="button"
+              className="project-detail-edit-button"
+              onClick={handleShareReport}
+              disabled={reportLoading}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="18" cy="5" r="2.5" />
+                <circle cx="6" cy="12" r="2.5" />
+                <circle cx="18" cy="19" r="2.5" />
+                <path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6" />
+              </svg>
+              {reportLoading ? 'Creating…' : 'Share report'}
+            </button>
+          )}
+
           {canEditProject && (
             <button
               type="button"
@@ -1023,6 +1059,80 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {reportUrl !== null && (
+        <div
+          className="project-member-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setReportUrl(null);
+          }}
+        >
+          <section
+            className="project-member-modal project-edit-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="share-report-title"
+          >
+            <div className="project-member-modal-header">
+              <div>
+                <span>Shareable report</span>
+                <h2 id="share-report-title">Report link ready</h2>
+                <p>{project.name}</p>
+              </div>
+              <button
+                type="button"
+                className="project-member-modal-close"
+                onClick={() => setReportUrl(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="project-report-body">
+              <p>
+                Anyone with this link can view a read-only report of this project
+                (summary, confirmed decisions, open action items, and recent activity)
+                — no sign-in needed. The link expires in 7 days.
+              </p>
+              <div className="project-report-link">
+                <input readOnly value={reportUrl} onFocus={(e) => e.target.select()} />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(reportUrl);
+                      setReportCopied(true);
+                    } catch {
+                      setReportCopied(false);
+                    }
+                  }}
+                >
+                  {reportCopied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <div className="project-report-actions">
+                <a
+                  className="project-edit-button project-edit-button--secondary"
+                  href={reportUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open report
+                </a>
+                <button
+                  type="button"
+                  className="project-edit-button project-edit-button--primary"
+                  onClick={() => setReportUrl(null)}
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </section>
         </div>

@@ -169,6 +169,8 @@ export const AIChat: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // null = unknown/loading; false = the selected project has no documents.
+  const [hasDocuments, setHasDocuments] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -247,6 +249,28 @@ export const AIChat: React.FC = () => {
 
     loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject]);
+
+  // Track whether the selected project has any documents, so the empty state can
+  // explain that an empty project can't answer questions (vs. looking broken).
+  useEffect(() => {
+    if (!selectedProject) {
+      setHasDocuments(null);
+      return;
+    }
+    let cancelled = false;
+    setHasDocuments(null);
+    client
+      .get(`/projects/${selectedProject}`)
+      .then((res) => {
+        if (!cancelled) setHasDocuments(Number((res.data as any)?.document_count) > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setHasDocuments(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedProject]);
 
   const selectedProjectName = useMemo(
@@ -474,11 +498,20 @@ export const AIChat: React.FC = () => {
               <div className="kf-chat-brand-mark" aria-hidden="true">
                 <span />
               </div>
-              <h2>Ask about {selectedProjectName || 'this project'}</h2>
-              <p>
-                I answer only from the documents in this project, and cite what I used.
-                Try asking about a decision, deadline, or action item.
-              </p>
+              {hasDocuments === false ? (
+                <>
+                  <h2>No documents in {selectedProjectName || 'this project'}</h2>
+                  <p>This project has no documents yet — upload one or switch projects.</p>
+                </>
+              ) : (
+                <>
+                  <h2>Ask about {selectedProjectName || 'this project'}</h2>
+                  <p>
+                    I answer only from the documents in this project, and cite what I used.
+                    Try asking about a decision, deadline, or action item.
+                  </p>
+                </>
+              )}
             </div>
           )}
 

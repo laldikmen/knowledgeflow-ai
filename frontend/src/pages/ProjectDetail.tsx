@@ -1098,7 +1098,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <p>
                 Anyone with this link can view a read-only report of this project
                 (summary, confirmed decisions, open action items, and recent activity)
-                — no sign-in needed. The link expires in 30 days.
+                — no sign-in needed. The link expires in 7 days.
               </p>
               <div className="project-report-link">
                 <input readOnly value={reportUrl} onFocus={(e) => e.target.select()} />

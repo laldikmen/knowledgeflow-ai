@@ -308,6 +308,37 @@
 .ins-cell-danger { color: var(--chart-red); font-weight: 700; }
 .ins-cell-warn { color: var(--chart-amber); font-weight: 700; }
 
+/* "Your workload" (limited contributor view) */
+.ins-mine {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.ins-mine-stat {
+  padding: 18px;
+  border: 1px solid var(--ins-border);
+  border-radius: 14px;
+  background: var(--ins-track);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ins-mine-stat span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ins-mine-stat strong {
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1080px) {
   .ins-stat-row { grid-template-columns: repeat(2, 1fr); }
   .ins-grid { grid-template-columns: 1fr; }

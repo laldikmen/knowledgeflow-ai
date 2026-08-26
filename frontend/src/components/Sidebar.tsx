@@ -13,6 +13,7 @@ interface SidebarItem {
 interface SidebarProps {
   currentPage: string;
   onNavigate: (page: string) => void;
+  canSeeInsights?: boolean;
   userRole?: string;
   userName?: string;
   userInitials?: string;
@@ -152,12 +153,18 @@ const isSystemAdministrator = (role: string) =>
 export const Sidebar: React.FC<SidebarProps> = ({
   currentPage,
   onNavigate,
+  canSeeInsights = false,
   userRole = 'Viewer',
   userName = 'User',
   userInitials = 'U',
   onLogout,
 }) => {
   const showAdminNavigation = isSystemAdministrator(userRole);
+
+  // Insights (analytics) is a management view — hide it from viewer-only members.
+  const navigationItems = NAVIGATION_ITEMS.filter(
+    (item) => item.id !== 'insights' || canSeeInsights,
+  );
 
   const renderItems = (items: SidebarItem[]) =>
     items.map((item) => {
@@ -196,7 +203,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-section">
         <div className="sidebar-section-title">Workspace</div>
         <nav className="sidebar-nav" aria-label="Workspace navigation">
-          {renderItems(NAVIGATION_ITEMS)}
+          {renderItems(navigationItems)}
         </nav>
       </div>
 

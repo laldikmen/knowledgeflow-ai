@@ -3,6 +3,8 @@ import client from '../api/client';
 import './Insights.css';
 
 interface Analytics {
+  access_level: 'full' | 'limited' | 'none';
+  my_throughput: { completed: number; active: number };
   summary: {
     documents: number;
     decisions: number;
@@ -185,30 +187,47 @@ export const Insights: React.FC = () => {
           <SegmentBar data={data.risk_breakdown} meta={RISK_META} order={['low', 'medium', 'high']} />
         </article>
 
-        {/* Throughput by owner */}
-        <article className="ins-card">
-          <header className="ins-card-header"><h2>Workload by owner</h2></header>
-          {data.throughput_by_owner.length === 0 ? (
-            <p className="ins-empty">No assigned tasks yet.</p>
-          ) : (
-            <ul className="ins-hbars">
-              {data.throughput_by_owner.map((o) => (
-                <li key={o.name}>
-                  <span className="ins-hbar-label">{o.name}</span>
-                  <span className="ins-hbar-track">
-                    <span className="ins-hbar-fill ins-hbar-fill--completed" style={{ width: `${(o.completed / maxOwner) * 100}%` }} title={`${o.completed} completed`} />
-                    <span className="ins-hbar-fill ins-hbar-fill--active" style={{ width: `${(o.active / maxOwner) * 100}%` }} title={`${o.active} active`} />
-                  </span>
-                  <span className="ins-hbar-value">{o.completed + o.active}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="ins-card-legend ins-card-legend--bottom">
-            <span><span className="ins-legend-dot ins-dot-completed" /> Completed</span>
-            <span><span className="ins-legend-dot ins-dot-active" /> Active</span>
-          </div>
-        </article>
+        {/* Throughput — full access sees the per-owner leaderboard; contributors
+            see only their own workload. */}
+        {data.access_level === 'full' ? (
+          <article className="ins-card">
+            <header className="ins-card-header"><h2>Workload by owner</h2></header>
+            {data.throughput_by_owner.length === 0 ? (
+              <p className="ins-empty">No assigned tasks yet.</p>
+            ) : (
+              <ul className="ins-hbars">
+                {data.throughput_by_owner.map((o) => (
+                  <li key={o.name}>
+                    <span className="ins-hbar-label">{o.name}</span>
+                    <span className="ins-hbar-track">
+                      <span className="ins-hbar-fill ins-hbar-fill--completed" style={{ width: `${(o.completed / maxOwner) * 100}%` }} title={`${o.completed} completed`} />
+                      <span className="ins-hbar-fill ins-hbar-fill--active" style={{ width: `${(o.active / maxOwner) * 100}%` }} title={`${o.active} active`} />
+                    </span>
+                    <span className="ins-hbar-value">{o.completed + o.active}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="ins-card-legend ins-card-legend--bottom">
+              <span><span className="ins-legend-dot ins-dot-completed" /> Completed</span>
+              <span><span className="ins-legend-dot ins-dot-active" /> Active</span>
+            </div>
+          </article>
+        ) : (
+          <article className="ins-card">
+            <header className="ins-card-header"><h2>Your workload</h2></header>
+            <div className="ins-mine">
+              <div className="ins-mine-stat">
+                <span>Completed</span>
+                <strong>{data.my_throughput.completed}</strong>
+              </div>
+              <div className="ins-mine-stat">
+                <span>Active</span>
+                <strong>{data.my_throughput.active}</strong>
+              </div>
+            </div>
+          </article>
+        )}
 
         {/* Most active documents */}
         <article className="ins-card">

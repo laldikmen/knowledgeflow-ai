@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
+import { embedAndStoreChunks } from '../utils/embeddings';
+import { createNotification } from './notifications';
 
 // Newer Claude models on Bedrock require a cross-region inference profile and the
 // Converse API (on-demand direct invoke is not supported).
@@ -214,6 +216,15 @@ ${documentText}`;
           ]
         );
       }
+    }
+
+    // Generate & store semantic embeddings for this document so the AI chat can
+    // retrieve it by meaning, not just keyword overlap. Best-effort: a failure
+    // here shouldn't fail the whole processing run (chat falls back to keywords).
+    try {
+      await embedAndStoreChunks(Number(documentId), documentText);
+    } catch (embedError) {
+      console.error('Embedding generation failed (continuing):', embedError);
     }
 
     // Update document status
@@ -483,11 +494,12 @@ export const updateDecision = async (req: Request, res: Response) => {
       });
     }
 
+    // Keep the decision's review status on edit (matching how task edits behave),
+    // so an already-confirmed decision stays confirmed — and therefore stays on
+    // the Project Timeline — with the corrected text, instead of silently
+    // dropping off the timeline until someone re-confirms it.
     await query(
-      `UPDATE decisions
-       SET decision_text = $1, review_status = 'draft',
-           reviewed_by = NULL, reviewed_at = NULL, review_note = NULL
-       WHERE id = $2`,
+      `UPDATE decisions SET decision_text = $1 WHERE id = $2`,
       [String(decision_text).trim(), decisionId]
     );
 
@@ -519,7 +531,8 @@ export const reviewActionItem = async (req: Request, res: Response) => {
 
     // Get task and check access
     const taskResult = await query(
-      `SELECT project_id, status FROM action_items WHERE id = $1`,
+      `SELECT project_id, status, assigned_to_user_id, task_title, deadline
+       FROM action_items WHERE id = $1`,
       [taskId]
     );
 
@@ -568,6 +581,26 @@ export const reviewActionItem = async (req: Request, res: Response) => {
          VALUES ($1, $2, $3, $4, $5)`,
         [taskId, previousStatus, newStatus, req.user.id, review_note || null]
       );
+    }
+
+    // Confirming a task turns it into real work — notify the assigned owner
+    // (unless they confirmed it themselves). Best-effort.
+    if (
+      newStatus === 'confirmed' &&
+      task.assigned_to_user_id &&
+      task.assigned_to_user_id !== req.user.id
+    ) {
+      try {
+        await createNotification(
+          task.assigned_to_user_id,
+          'task_assigned',
+          `New task assigned: ${task.task_title}`,
+          task.deadline ? `Due ${task.deadline}` : null,
+          `/tasks/${taskId}`
+        );
+      } catch (notifyError) {
+        console.error('Task-assigned notification failed:', notifyError);
+      }
     }
 
     return res.json({

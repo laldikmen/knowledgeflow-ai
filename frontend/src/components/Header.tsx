@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from './Button';
+import { NotificationBell } from './NotificationBell';
 
 interface HeaderProps {
   title: string;
@@ -21,12 +22,10 @@ export const Header: React.FC<HeaderProps> = ({
   searchPlaceholder,
   actionLabel,
   actionIcon = 'plus',
-  showNotifications = false,
   initialQuery = '',
   onSearch,
   onSearchSubmit,
   onAction,
-  onNotifications,
 }) => {
   const [searchQuery, setSearchQuery] = useState(initialQuery);
 
@@ -93,20 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
           </Button>
         )}
 
-        {showNotifications && (
-          <button
-            type="button"
-            className="header-notifications"
-            aria-label="Notifications"
-            onClick={onNotifications}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-              <path d="M10 21h4" />
-            </svg>
-            <span className="header-notification-dot" />
-          </button>
-        )}
+        <NotificationBell />
       </div>
     </header>
   );

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
+import { createNotification } from './notifications';
 
 export const createTask = async (req: Request, res: Response) => {
   try {
@@ -63,6 +64,21 @@ export const createTask = async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4)`,
       [task.id, null, 'confirmed', req.user.id]
     );
+
+    // Notify the assignee if the task was created for someone else. Best-effort.
+    if (task.assigned_to_user_id && Number(task.assigned_to_user_id) !== req.user.id) {
+      try {
+        await createNotification(
+          Number(task.assigned_to_user_id),
+          'task_assigned',
+          `You were assigned a task: ${task.task_title}`,
+          task.deadline ? `Due ${task.deadline}` : null,
+          `/tasks/${task.id}`
+        );
+      } catch (notifyError) {
+        console.error('Task-assigned notification failed:', notifyError);
+      }
+    }
 
     return res.status(201).json({
       success: true,
@@ -553,6 +569,27 @@ export const updateTask = async (req: Request, res: Response) => {
          VALUES ($1, $2, $3, $4, $5)`,
         [taskId, previousStatus, status, req.user.id, changeNote]
       );
+    }
+
+    // Notify a newly-assigned owner — when the owner changes to a different,
+    // non-null user who isn't the person making the edit. Best-effort.
+    if (
+      assigned_to_user_id !== undefined &&
+      assigned_to_user_id &&
+      Number(assigned_to_user_id) !== Number(task.assigned_to_user_id) &&
+      Number(assigned_to_user_id) !== req.user.id
+    ) {
+      try {
+        await createNotification(
+          Number(assigned_to_user_id),
+          'task_assigned',
+          `You were assigned a task: ${result.rows[0].task_title}`,
+          deadline ? `Due ${deadline}` : null,
+          `/tasks/${taskId}`
+        );
+      } catch (notifyError) {
+        console.error('Task-assigned notification failed:', notifyError);
+      }
     }
 
     return res.json({

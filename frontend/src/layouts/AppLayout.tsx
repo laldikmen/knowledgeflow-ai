@@ -37,6 +37,7 @@ const pageRoutes: Record<string, string> = {
   upload: '/upload',
   'action-tracker': '/action-tracker',
   'ai-chat': '/ai-chat',
+  insights: '/insights',
   timeline: '/timeline',
   'user-management': '/users',
   settings: '/settings',
@@ -45,6 +46,7 @@ const pageRoutes: Record<string, string> = {
 const pageTitles: Record<string, string> = {
   upload: 'Upload Center',
   'ai-chat': 'AI Chat Assistant',
+  insights: 'Insights',
   timeline: 'Project Timeline',
   'user-management': 'User Management',
   settings: 'Settings',
@@ -113,6 +115,36 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       cancelled = true;
     };
   }, [currentPage]);
+
+  // Insights (analytics) is a management view: system admins and anyone who
+  // manages or contributes to a project can see it; viewer-only members cannot.
+  const [canSeeInsights, setCanSeeInsights] = useState(false);
+  useEffect(() => {
+    const isAdmin = ['system administrator', 'administrator', 'admin'].includes(
+      (userRole || '').trim().toLowerCase(),
+    );
+    if (isAdmin) {
+      setCanSeeInsights(true);
+      return;
+    }
+    let cancelled = false;
+    client
+      .get('/projects')
+      .then((res) => {
+        if (cancelled) return;
+        const projects = Array.isArray(res.data) ? res.data : (res.data as any)?.data || [];
+        const has = projects.some((p: any) =>
+          ['manager', 'contributor'].includes(String(p.role || p.project_role || '').toLowerCase()),
+        );
+        setCanSeeInsights(has);
+      })
+      .catch(() => {
+        if (!cancelled) setCanSeeInsights(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
 
   const dashboardSubtitle = useMemo(() => {
     const s = reviewSummary;
@@ -221,6 +253,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           <Sidebar
             currentPage={currentPage}
             onNavigate={handleNavigate}
+            canSeeInsights={canSeeInsights}
             userName={userName}
             userRole={userRole}
             userInitials={userInitials}

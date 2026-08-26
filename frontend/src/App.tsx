@@ -11,6 +11,7 @@ import { Upload } from './pages/Upload';
 import { ActionTracker } from './pages/ActionTracker';
 import { TaskDetail } from './pages/TaskDetail';
 import { AIChat } from './pages/AIChat';
+import { Insights } from './pages/Insights';
 import { Timeline } from './pages/Timeline';
 import { UserManagement } from './pages/UserManagement';
 import { Settings, type ThemePreference } from './pages/Settings';
@@ -185,6 +186,7 @@ function App() {
             }
           />
           <Route path="/ai-chat" element={<AIChat />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/timeline" element={<Timeline />} />
           <Route
             path="/users"

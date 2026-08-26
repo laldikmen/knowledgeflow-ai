@@ -37,6 +37,7 @@ const pageRoutes: Record<string, string> = {
   upload: '/upload',
   'action-tracker': '/action-tracker',
   'ai-chat': '/ai-chat',
+  insights: '/insights',
   timeline: '/timeline',
   'user-management': '/users',
   settings: '/settings',
@@ -45,6 +46,7 @@ const pageRoutes: Record<string, string> = {
 const pageTitles: Record<string, string> = {
   upload: 'Upload Center',
   'ai-chat': 'AI Chat Assistant',
+  insights: 'Insights',
   timeline: 'Project Timeline',
   'user-management': 'User Management',
   settings: 'Settings',

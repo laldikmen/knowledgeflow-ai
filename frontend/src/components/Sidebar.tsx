@@ -120,12 +120,22 @@ const LogoutIcon: SidebarIcon = (props) => (
   </IconBase>
 );
 
+const InsightsIcon: SidebarIcon = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M3 3v18h18" />
+    <path d="M7 15v-3" />
+    <path d="M12 15V8" />
+    <path d="M17 15v-6" />
+  </svg>
+);
+
 const NAVIGATION_ITEMS: SidebarItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
   { id: 'projects', label: 'Projects', icon: ProjectsIcon },
   { id: 'documents', label: 'Documents', icon: DocumentsIcon },
   { id: 'upload', label: 'Upload Center', icon: UploadIcon },
   { id: 'action-tracker', label: 'Action Tracker', icon: TasksIcon },
+  { id: 'insights', label: 'Insights', icon: InsightsIcon },
   { id: 'ai-chat', label: 'AI Chat Assistant', icon: ChatIcon },
   { id: 'timeline', label: 'Project Timeline', icon: TimelineIcon },
 ];

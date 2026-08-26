@@ -13,7 +13,7 @@ async function buildProjectReport(projectId: number) {
   if (projectRes.rows.length === 0) return null;
   const project = projectRes.rows[0];
 
-  const [stats, decisions, actions, timeline] = await Promise.all([
+  const [stats, decisions, actions, timeline, members] = await Promise.all([
     query(
       `SELECT
          (SELECT COUNT(*) FROM documents WHERE project_id = $1)::int AS documents,
@@ -48,6 +48,13 @@ async function buildProjectReport(projectId: number) {
        ORDER BY h.changed_at DESC LIMIT 15`,
       [projectId],
     ),
+    query(
+      `SELECT u.name, u.email, pm.project_role
+       FROM project_members pm JOIN users u ON u.id = pm.user_id
+       WHERE pm.project_id = $1
+       ORDER BY CASE pm.project_role WHEN 'manager' THEN 0 WHEN 'contributor' THEN 1 ELSE 2 END, u.name`,
+      [projectId],
+    ),
   ]);
 
   return {
@@ -56,6 +63,7 @@ async function buildProjectReport(projectId: number) {
     decisions: decisions.rows,
     actions: actions.rows,
     timeline: timeline.rows,
+    members: members.rows,
     generated_at: new Date().toISOString(),
   };
 }
@@ -141,7 +149,7 @@ const INK = '#26231d';
 const MUTED = '#7a7469';
 
 function renderReportPdf(doc: PDFKit.PDFDocument, report: any) {
-  const { project, stats, decisions, actions, timeline } = report;
+  const { project, stats, decisions, actions, timeline, members } = report;
   const fmtDate = (d: string) => (d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—');
 
   const heading = (text: string) => {
@@ -167,6 +175,18 @@ function renderReportPdf(doc: PDFKit.PDFDocument, report: any) {
   doc.fillColor(INK).fontSize(11).font('Helvetica').text(
     `Documents: ${stats.documents}     Confirmed decisions: ${stats.decisions}     Open action items: ${stats.open_actions}     Completed: ${stats.completed}`,
   );
+
+  // Team
+  heading('Team');
+  if (!members || members.length === 0) {
+    doc.fillColor(MUTED).fontSize(11).font('Helvetica-Oblique').text('No members yet.');
+  } else {
+    members.forEach((m: any) => {
+      doc.fillColor(INK).fontSize(11).font('Helvetica-Bold').text('• ', { continued: true })
+        .font('Helvetica').text(`${m.name}  `, { continued: true })
+        .fillColor(MUTED).fontSize(9.5).text(`(${m.project_role})`);
+    });
+  }
 
   // Key decisions
   heading('Key decisions');

@@ -204,6 +204,21 @@ CREATE TABLE chat_messages (
 CREATE INDEX idx_chat_conversations_project_user ON chat_conversations(project_id, user_id);
 CREATE INDEX idx_chat_messages_conversation ON chat_messages(conversation_id);
 
+-- In-app notifications (task assignments, daily digests). Emailed digests reuse
+-- the same source data via the scheduled digest job.
+CREATE TABLE notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,
+  read_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
+
 -- Create indexes for performance
 CREATE INDEX idx_project_members_user ON project_members(user_id);
 CREATE INDEX idx_project_members_project ON project_members(project_id);

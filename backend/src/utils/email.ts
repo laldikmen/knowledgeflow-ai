@@ -13,6 +13,8 @@ const EMAIL_ENABLED = String(process.env.EMAIL_ENABLED).toLowerCase() === 'true'
 const EMAIL_FROM = process.env.EMAIL_FROM || 'no-reply@knowledgeflow.ai';
 // SES lives per-region; default to the app's region.
 const SES_REGION = process.env.SES_REGION || process.env.AWS_REGION || 'eu-central-1';
+// Where links in emails point (the deployed frontend in production).
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 export const emailEnabled = (): boolean => EMAIL_ENABLED;
 
@@ -95,4 +97,48 @@ export async function sendResetEmail(to: string, name: string, link: string) {
     ),
     `Hi ${first}, reset your KnowledgeFlow AI password here (expires in 1 hour): ${link}. If you didn't request this, ignore this email.`,
   );
+}
+
+/** Daily digest email: a user's overdue + upcoming action items. */
+export async function sendDigestEmail(
+  to: string,
+  name: string,
+  overdue: Array<{ title: string; deadline: string }>,
+  upcoming: Array<{ title: string; deadline: string }>,
+) {
+  const first = (name || '').trim().split(' ')[0] || 'there';
+  const link = `${FRONTEND_URL}/action-tracker`;
+
+  const row = (label: string, color: string) => (t: { title: string; deadline: string }) => `
+    <tr>
+      <td style="padding:8px 0;border-bottom:1px solid #eee7db">
+        <span style="display:inline-block;font-size:11px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.04em">${label}</span><br>
+        <span style="font-size:14px;color:#302c25">${t.title}</span>
+        <span style="font-size:12px;color:#8b8894"> — due ${t.deadline}</span>
+      </td>
+    </tr>`;
+  const rows = [
+    ...overdue.map(row('Overdue', '#c0433a')),
+    ...upcoming.map(row('Due soon', '#9a7a12')),
+  ].join('');
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f4f3f0;padding:32px">
+    <div style="max-width:540px;margin:0 auto;background:#fffdf9;border:1px solid #e2dfd8;border-radius:16px;padding:32px">
+      <h1 style="margin:0 0 8px;font-size:20px;color:#23222b">KnowledgeFlow AI</h1>
+      <h2 style="margin:0 0 16px;font-size:16px;color:#565462;font-weight:600">Your task digest</h2>
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#565462">Hi ${first}, here's what needs your attention: <strong>${overdue.length} overdue</strong> and <strong>${upcoming.length} due in the next 7 days</strong>.</p>
+      <table style="width:100%;border-collapse:collapse">${rows}</table>
+      <a href="${link}" style="display:inline-block;margin-top:22px;background:#5a54d6;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 22px;border-radius:10px">Open the Action Tracker</a>
+    </div>
+  </div>`;
+
+  const textLines = [
+    `Hi ${first}, here's your KnowledgeFlow AI task digest:`,
+    ...overdue.map(t => `  OVERDUE: ${t.title} (due ${t.deadline})`),
+    ...upcoming.map(t => `  DUE SOON: ${t.title} (due ${t.deadline})`),
+    `Open the Action Tracker: ${link}`,
+  ];
+
+  return sendEmail(to, `Your task digest — ${overdue.length} overdue, ${upcoming.length} due soon`, html, textLines.join('\n'));
 }

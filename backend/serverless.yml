@@ -94,6 +94,15 @@ functions:
     timeout: 30
     memorySize: 512
 
+  # Daily task digest: emails each user their overdue/upcoming action items and
+  # writes in-app notifications. Runs at 07:00 UTC every day.
+  digest:
+    handler: dist/jobs/digest.handler
+    events:
+      - schedule: cron(0 7 * * ? *)
+    timeout: 120
+    memorySize: 512
+
 # Packaging - use pre-compiled dist folder.
 # Exclude build-only tooling from the Lambda bundle: the code ships precompiled
 # in dist/, so the TypeScript compiler is never needed at runtime. Dropping it

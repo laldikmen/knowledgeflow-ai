@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
 import { embedAndStoreChunks } from '../utils/embeddings';
+import { createNotification } from './notifications';
 
 // Newer Claude models on Bedrock require a cross-region inference profile and the
 // Converse API (on-demand direct invoke is not supported).
@@ -529,7 +530,8 @@ export const reviewActionItem = async (req: Request, res: Response) => {
 
     // Get task and check access
     const taskResult = await query(
-      `SELECT project_id, status FROM action_items WHERE id = $1`,
+      `SELECT project_id, status, assigned_to_user_id, task_title, deadline
+       FROM action_items WHERE id = $1`,
       [taskId]
     );
 
@@ -578,6 +580,26 @@ export const reviewActionItem = async (req: Request, res: Response) => {
          VALUES ($1, $2, $3, $4, $5)`,
         [taskId, previousStatus, newStatus, req.user.id, review_note || null]
       );
+    }
+
+    // Confirming a task turns it into real work — notify the assigned owner
+    // (unless they confirmed it themselves). Best-effort.
+    if (
+      newStatus === 'confirmed' &&
+      task.assigned_to_user_id &&
+      task.assigned_to_user_id !== req.user.id
+    ) {
+      try {
+        await createNotification(
+          task.assigned_to_user_id,
+          'task_assigned',
+          `New task assigned: ${task.task_title}`,
+          task.deadline ? `Due ${task.deadline}` : null,
+          `/tasks/${taskId}`
+        );
+      } catch (notifyError) {
+        console.error('Task-assigned notification failed:', notifyError);
+      }
     }
 
     return res.json({

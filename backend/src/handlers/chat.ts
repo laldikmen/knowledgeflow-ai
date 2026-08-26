@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import { callBedrock } from './ai';
+import { embedText, toVectorLiteral } from '../utils/embeddings';
 
 function extractKeywords(text: string): string[] {
   return text
@@ -9,52 +10,107 @@ function extractKeywords(text: string): string[] {
     .filter(word => word.length > 3 && !['what', 'when', 'where', 'which', 'that', 'this', 'from', 'with', 'have', 'been', 'will', 'does', 'should', 'could'].includes(word));
 }
 
-async function findRelevantDocuments(projectId: number, userId: number, userRole: string, keywords: string[]): Promise<Array<{id: number; title: string; text: string; similarity: number}>> {
+type RelevantDoc = { id: number; title: string; text: string; similarity: number };
+
+// Keyword fallback — used when a document has no embeddings yet, or when semantic
+// search finds nothing confident. Prefers keyword-matched documents; if none
+// match, returns the most recent ones so general questions still get grounding.
+async function keywordFallback(
+  projectId: number,
+  userId: number,
+  keywords: string[],
+): Promise<RelevantDoc[]> {
+  const accessibleDocs = await query(
+    `SELECT d.id, d.title, dt.extracted_text
+     FROM documents d
+     LEFT JOIN document_texts dt ON d.id = dt.document_id
+     WHERE d.project_id = $1
+     AND d.project_id IN (
+       SELECT pm.project_id FROM project_members pm WHERE pm.user_id = $2
+       UNION
+       SELECT id FROM projects WHERE id = $1 AND EXISTS (
+         SELECT 1 FROM users WHERE id = $2 AND system_role = 'admin'
+       )
+     )
+     AND dt.extracted_text IS NOT NULL
+     ORDER BY d.uploaded_at DESC
+     LIMIT 10`,
+    [projectId, userId],
+  );
+
+  const scoredDocs = accessibleDocs.rows.map(doc => {
+    const textLower = (doc.extracted_text || '').toLowerCase();
+    const matchCount = keywords.filter(kw => textLower.includes(kw)).length;
+    const wordCount = textLower.split(/\s+/).length;
+    const similarity = matchCount > 0 ? matchCount / Math.max(wordCount / 100, 1) : 0;
+    return { id: doc.id, title: doc.title, text: doc.extracted_text, similarity };
+  });
+
+  const matched = scoredDocs.filter(doc => doc.similarity > 0);
+  return (matched.length > 0 ? matched : scoredDocs)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 3);
+}
+
+// Hybrid retrieval: semantic (vector) search over document chunks, re-ranked with
+// a small keyword bonus, returning the best chunk per document (top 3). Falls back
+// to keyword search when there are no embeddings or no confident semantic match —
+// so both un-embedded documents and general questions still work.
+async function findRelevantDocuments(
+  projectId: number,
+  userId: number,
+  _userRole: string,
+  keywords: string[],
+  question: string,
+): Promise<RelevantDoc[]> {
   try {
-    // Get all accessible documents for this project
-    const accessibleDocs = await query(
-      `SELECT d.id, d.title, dt.extracted_text
-       FROM documents d
-       LEFT JOIN document_texts dt ON d.id = dt.document_id
-       WHERE d.project_id = $1
+    const queryVec = await embedText(question);
+    const vec = await query(
+      `SELECT dc.document_id, d.title, dc.chunk_text,
+              1 - (dc.embedding <=> $1::vector) AS similarity
+       FROM document_chunks dc
+       JOIN documents d ON d.id = dc.document_id
+       WHERE d.project_id = $2
        AND d.project_id IN (
-         SELECT pm.project_id FROM project_members pm WHERE pm.user_id = $2
+         SELECT pm.project_id FROM project_members pm WHERE pm.user_id = $3
          UNION
-         SELECT id FROM projects WHERE id = $1 AND EXISTS (
+         SELECT id FROM projects WHERE id = $2 AND EXISTS (
            SELECT 1 FROM users WHERE id = $3 AND system_role = 'admin'
          )
        )
-       AND dt.extracted_text IS NOT NULL
-       ORDER BY d.uploaded_at DESC
-       LIMIT 10`,
-      [projectId, userId, userId]
+       ORDER BY dc.embedding <=> $1::vector
+       LIMIT 12`,
+      [toVectorLiteral(queryVec), projectId, userId],
     );
 
-    // Score documents by keyword relevance
-    const scoredDocs = accessibleDocs.rows.map(doc => {
-      const textLower = (doc.extracted_text || '').toLowerCase();
-      const matchCount = keywords.filter(kw => textLower.includes(kw)).length;
-      const wordCount = textLower.split(/\s+/).length;
-      const similarity = matchCount > 0 ? matchCount / Math.max(wordCount / 100, 1) : 0;
+    if (vec.rows.length > 0) {
+      // Best chunk per document; blended score = cosine similarity + keyword bonus.
+      const byDoc = new Map<number, RelevantDoc>();
+      for (const r of vec.rows) {
+        const tl = (r.chunk_text || '').toLowerCase();
+        const kw = keywords.filter(k => tl.includes(k)).length;
+        const score = Number(r.similarity) + Math.min(kw * 0.03, 0.15);
+        const prev = byDoc.get(r.document_id);
+        if (!prev || score > prev.similarity) {
+          byDoc.set(r.document_id, {
+            id: r.document_id,
+            title: r.title,
+            text: r.chunk_text,
+            similarity: score,
+          });
+        }
+      }
+      const top = [...byDoc.values()].sort((a, b) => b.similarity - a.similarity).slice(0, 3);
+      // Keep only confident matches; if the best is weak, use the keyword fallback.
+      const confident = top.filter(t => t.similarity >= 0.3);
+      if (confident.length > 0) return confident;
+    }
+  } catch (error) {
+    console.error('Semantic retrieval failed, falling back to keyword:', error);
+  }
 
-      return {
-        id: doc.id,
-        title: doc.title,
-        text: doc.extracted_text,
-        similarity,
-      };
-    });
-
-    // Prefer documents that matched the question's keywords. If none matched,
-    // still pass the most-recent documents so the model can answer general
-    // questions (e.g. "summarize the key points") that share no literal words
-    // with the text. Source accuracy is handled separately: the answer only
-    // cites the documents it actually used, and an unanswerable question returns
-    // the "not found" message — so nothing is mislisted as a source either way.
-    const matched = scoredDocs.filter(doc => doc.similarity > 0);
-    return (matched.length > 0 ? matched : scoredDocs)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, 3);
+  try {
+    return await keywordFallback(projectId, userId, keywords);
   } catch (error) {
     console.error('Find relevant documents error:', error);
     return [];
@@ -148,7 +204,8 @@ export const askQuestion = async (req: Request, res: Response) => {
       parseInt(projectId as string),
       req.user.id,
       accessResult.rows[0]?.project_role || 'viewer',
-      keywords
+      keywords,
+      question
     );
 
     // The spec's exact wording for "no grounding found". Used verbatim so the
@@ -165,7 +222,7 @@ export const askQuestion = async (req: Request, res: Response) => {
     } else {
       let context = `Project: ${projectName}\n\nRelevant documents:\n\n`;
       relevantDocs.forEach((doc, index) => {
-        const excerpt = doc.text.substring(0, 500);
+        const excerpt = doc.text.substring(0, 1500);
         context += `[Document ${index + 1}: ${doc.title}]\n${excerpt}...\n\n`;
       });
 

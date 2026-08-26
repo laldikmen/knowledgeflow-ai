@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
+import { embedAndStoreChunks } from '../utils/embeddings';
 
 // Newer Claude models on Bedrock require a cross-region inference profile and the
 // Converse API (on-demand direct invoke is not supported).
@@ -214,6 +215,15 @@ ${documentText}`;
           ]
         );
       }
+    }
+
+    // Generate & store semantic embeddings for this document so the AI chat can
+    // retrieve it by meaning, not just keyword overlap. Best-effort: a failure
+    // here shouldn't fail the whole processing run (chat falls back to keywords).
+    try {
+      await embedAndStoreChunks(Number(documentId), documentText);
+    } catch (embedError) {
+      console.error('Embedding generation failed (continuing):', embedError);
     }
 
     // Update document status

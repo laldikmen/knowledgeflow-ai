@@ -1,3 +1,6 @@
+-- pgvector powers semantic retrieval for the AI chat (document_chunks below).
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Users table
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
@@ -74,6 +77,21 @@ CREATE TABLE document_texts (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Document chunks with embeddings — the semantic-search index for the AI chat.
+-- Each document's extracted text is split into overlapping chunks and embedded
+-- with Amazon Titan Text Embeddings V2 (1024-dim).
+CREATE TABLE document_chunks (
+  id SERIAL PRIMARY KEY,
+  document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  chunk_index INTEGER NOT NULL,
+  chunk_text TEXT NOT NULL,
+  embedding vector(1024),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_document_chunks_doc ON document_chunks(document_id);
+CREATE INDEX idx_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
 
 -- AI summaries table
 CREATE TABLE ai_summaries (

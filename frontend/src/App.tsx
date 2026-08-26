@@ -198,7 +198,7 @@ function App() {
             path="/users"
             element={
               userIsAdministrator ? (
-                <UserManagement />
+                <UserManagement currentUserEmail={authUser.email} />
               ) : (
                 <Navigate to="/dashboard" replace />
               )

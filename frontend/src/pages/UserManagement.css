@@ -267,10 +267,24 @@
   color: #56784f;
 }
 
+.user-management-actions .user-management-action--delete {
+  color: #a11d1d;
+  font-weight: 700;
+}
+
 .user-management-actions button:disabled {
   color: #b9b2a7;
   cursor: not-allowed;
   text-decoration: none;
+}
+
+.user-management-inline-error {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(161, 29, 29, 0.08);
+  color: #a11d1d;
+  font: 600 13px/1.4 var(--sans);
 }
 
 .user-management-modal-backdrop {

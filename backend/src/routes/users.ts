@@ -5,6 +5,7 @@ import {
   updateUser,
   setUserMemberships,
   updateUserStatus,
+  deleteUser,
 } from '../handlers/users';
 import { verifyToken, requireAdmin } from '../middleware/auth';
 
@@ -27,5 +28,8 @@ router.put('/:userId/memberships', requireAdmin, setUserMemberships);
 
 // Activate / deactivate a user account (admin only)
 router.patch('/:userId/status', requireAdmin, updateUserStatus);
+
+// Permanently delete a user account (admin only)
+router.delete('/:userId', requireAdmin, deleteUser);
 
 export default router;

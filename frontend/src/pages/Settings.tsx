@@ -291,7 +291,7 @@ export const Settings: React.FC<SettingsProps> = ({
       <div className="settings-panel-heading">
         <div>
           <h2 id="settings-security-title">Security</h2>
-          <p>Manage your password and current authenticated session.</p>
+          <p>Manage your password and sign out of this browser.</p>
         </div>
       </div>
 
@@ -330,23 +330,6 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
       )}
-
-      <div className="settings-security-card">
-        <div className="settings-security-icon" aria-hidden="true">◉</div>
-        <div className="settings-session-copy">
-          <strong>Current active session</strong>
-          <p>
-            This browser · Active now
-          </p>
-          <small>
-            Mock session created from the current local authentication record.
-          </small>
-        </div>
-        <span className="settings-session-badge">
-          <span className="settings-status-dot" />
-          Current
-        </span>
-      </div>
 
       <div className="settings-danger-zone">
         <div>

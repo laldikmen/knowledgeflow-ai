@@ -83,7 +83,13 @@ const getInitials = (name: string) => {
 const roleClassName = (role: UserRole) =>
   role.toLowerCase().replace(/\s+/g, '-');
 
-export const UserManagement: React.FC = () => {
+interface UserManagementProps {
+  currentUserEmail: string;
+}
+
+export const UserManagement: React.FC<UserManagementProps> = ({
+  currentUserEmail,
+}) => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -92,6 +98,8 @@ export const UserManagement: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [pendingCreate, setPendingCreate] = useState<UserFormState | null>(null);
   const [pendingStatusUser, setPendingStatusUser] = useState<ManagedUser | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<ManagedUser | null>(null);
+  const [deleteError, setDeleteError] = useState('');
   const [inviteResult, setInviteResult] = useState<{
     name: string;
     email: string;
@@ -331,6 +339,25 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const confirmDeleteUser = async () => {
+    if (!pendingDeleteUser) return;
+
+    setIsSaving(true);
+    setDeleteError('');
+    try {
+      await client.delete(`/users/${pendingDeleteUser.id}`);
+      await fetchData();
+      setPendingDeleteUser(null);
+    } catch (error: any) {
+      setDeleteError(
+        error.response?.data?.error ||
+          'Could not delete this user. Please try again.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const getProjectNames = (user: ManagedUser) => {
     if (user.role === 'System Administrator') return 'All projects';
     if (user.projectIds.length === 0) return 'No projects assigned';
@@ -436,6 +463,18 @@ export const UserManagement: React.FC = () => {
                     >
                       {user.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
+                    {user.email !== currentUserEmail && (
+                      <button
+                        type="button"
+                        className="user-management-action--delete"
+                        onClick={() => {
+                          setDeleteError('');
+                          setPendingDeleteUser(user);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -651,6 +690,36 @@ export const UserManagement: React.FC = () => {
         tone={pendingStatusUser?.status === 'active' ? 'danger' : 'success'}
         onClose={() => setPendingStatusUser(null)}
         onConfirm={confirmStatusChange}
+      />
+
+      <ConfirmationModal
+        isOpen={pendingDeleteUser !== null}
+        title={`Delete ${pendingDeleteUser?.name}?`}
+        description={
+          <>
+            <p>
+              This permanently removes <strong>{pendingDeleteUser?.name}</strong>{' '}
+              ({pendingDeleteUser?.email}) and their project memberships.{' '}
+              <strong>This cannot be undone.</strong>
+            </p>
+            <p>
+              Their past activity (documents, decisions, and tasks) is kept for
+              history but will no longer show their name. To simply revoke access,
+              use <strong>Deactivate</strong> instead.
+            </p>
+            {deleteError && (
+              <p className="user-management-inline-error">{deleteError}</p>
+            )}
+          </>
+        }
+        confirmLabel="Delete permanently"
+        cancelLabel="Cancel"
+        tone="danger"
+        onClose={() => {
+          setPendingDeleteUser(null);
+          setDeleteError('');
+        }}
+        onConfirm={confirmDeleteUser}
       />
 
       {inviteResult && (

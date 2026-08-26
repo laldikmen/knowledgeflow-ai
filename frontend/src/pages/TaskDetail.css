@@ -338,6 +338,16 @@
   text-align: right;
 }
 
+.task-detail-owner-name {
+  color: inherit;
+}
+
+.task-detail-owner-unassigned {
+  color: var(--text-tertiary, #a7a094);
+  font-weight: 500;
+  font-style: italic;
+}
+
 .task-detail-danger-text {
   color: #c9543d !important;
 }

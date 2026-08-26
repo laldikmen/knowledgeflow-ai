@@ -494,11 +494,12 @@ export const updateDecision = async (req: Request, res: Response) => {
       });
     }
 
+    // Keep the decision's review status on edit (matching how task edits behave),
+    // so an already-confirmed decision stays confirmed — and therefore stays on
+    // the Project Timeline — with the corrected text, instead of silently
+    // dropping off the timeline until someone re-confirms it.
     await query(
-      `UPDATE decisions
-       SET decision_text = $1, review_status = 'draft',
-           reviewed_by = NULL, reviewed_at = NULL, review_note = NULL
-       WHERE id = $2`,
+      `UPDATE decisions SET decision_text = $1 WHERE id = $2`,
       [String(decision_text).trim(), decisionId]
     );
 

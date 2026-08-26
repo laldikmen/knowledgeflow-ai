@@ -35,6 +35,7 @@ interface TaskDetailData {
   id: number;
   title: string;
   description: string;
+  projectId?: number;
   projectName: string;
   ownerName: string;
   ownerInitials: string;
@@ -171,15 +172,6 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await client.get('/users');
-        setUsers((response.data || []).map((u: any) => ({ id: u.id, name: u.name })));
-      } catch (error) {
-        console.error('Failed to load users', error);
-        setUsers([]);
-      }
-    };
     const fetchProjects = async () => {
       try {
         const response = await client.get('/projects');
@@ -189,9 +181,31 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         setProjects([]);
       }
     };
-    fetchUsers();
     fetchProjects();
   }, []);
+
+  // Owner options are the members of the task's own project — you can only assign
+  // a task to someone who belongs to that project.
+  useEffect(() => {
+    if (!task?.projectId) return;
+    let cancelled = false;
+    client
+      .get(`/projects/${task.projectId}`)
+      .then((response) => {
+        if (cancelled) return;
+        const members = ((response.data as any)?.members || []).map((m: any) => ({
+          id: m.id,
+          name: m.name,
+        }));
+        setUsers(members);
+      })
+      .catch(() => {
+        if (!cancelled) setUsers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.projectId]);
 
   const loadTask = async () => {
     setIsLoading(true);
@@ -214,6 +228,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
         id: data.id,
         title: data.title || data.task_title,
         description: data.description,
+        projectId: data.project_id,
         projectName: data.project_name,
         ownerName: data.owner_name,
         ownerInitials: extractInitials(data.owner_name),
@@ -570,8 +585,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({
               <div>
                 <dt>Owner</dt>
                 <dd>
-                  <span className="task-detail-avatar">{task.ownerInitials}</span>
-                  {task.ownerName}
+                  {task.ownerName ? (
+                    <>
+                      <span className="task-detail-avatar">{task.ownerInitials}</span>
+                      <span className="task-detail-owner-name">{task.ownerName}</span>
+                    </>
+                  ) : (
+                    <span className="task-detail-owner-unassigned">Unassigned</span>
+                  )}
                 </dd>
               </div>
               <div>

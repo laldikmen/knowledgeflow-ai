@@ -30,6 +30,20 @@ const DEFAULT_PROJECTS = [
   'Mobile App v3',
 ];
 
+// Tasks can legitimately have a null description / owner / deadline (those columns
+// are nullable). Coerce every string field to '' so the controlled inputs and the
+// .trim() calls below never crash on null (which previously threw a TypeError and
+// left the modal stuck open with no error shown).
+const normalizeValues = (v: TaskEditValues): TaskEditValues => ({
+  title: v.title ?? '',
+  description: v.description ?? '',
+  sourceContext: v.sourceContext ?? '',
+  owner: v.owner ?? '',
+  deadline: v.deadline ?? '',
+  risk: v.risk ?? 'low',
+  projectName: v.projectName ?? '',
+});
+
 export const TaskEditModal: React.FC<TaskEditModalProps> = ({
   isOpen,
   initialValues,
@@ -38,7 +52,7 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
   projectOptions,
   ownerOptions,
 }) => {
-  const [form, setForm] = useState<TaskEditValues>(initialValues);
+  const [form, setForm] = useState<TaskEditValues>(() => normalizeValues(initialValues));
   const [error, setError] = useState('');
   const [fetchedOwners, setFetchedOwners] = useState<string[]>([]);
   const [fetchedProjects, setFetchedProjects] = useState<string[]>(DEFAULT_PROJECTS);
@@ -71,7 +85,7 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setForm(initialValues);
+    setForm(normalizeValues(initialValues));
     setError('');
   }, [initialValues, isOpen]);
 
@@ -109,24 +123,22 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (
-      !form.title.trim() ||
-      !form.description.trim() ||
-      !form.owner.trim() ||
-      !form.projectName.trim()
-    ) {
-      setError('Task title, description, owner, and project are required.');
+    // Only title and project are actually required (both are NOT NULL in the DB);
+    // description and owner are optional — a task can have no description and be
+    // unassigned. Trims are null-safe via the ?? '' fallback.
+    if (!(form.title ?? '').trim() || !(form.projectName ?? '').trim()) {
+      setError('Task title and project are required.');
       return;
     }
 
     onSave({
       ...form,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      sourceContext: form.sourceContext.trim(),
-      owner: form.owner.trim(),
-      deadline: form.deadline.trim(),
-      projectName: form.projectName.trim(),
+      title: (form.title ?? '').trim(),
+      description: (form.description ?? '').trim(),
+      sourceContext: (form.sourceContext ?? '').trim(),
+      owner: (form.owner ?? '').trim(),
+      deadline: (form.deadline ?? '').trim(),
+      projectName: (form.projectName ?? '').trim(),
     });
   };
 

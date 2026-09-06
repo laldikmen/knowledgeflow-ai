@@ -34,10 +34,14 @@
   font-size: 13px;
   font-weight: 700;
   border-radius: 12px;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
   box-shadow: 0 8px 24px rgba(38, 35, 29, 0.25);
   transition: transform 0.18s ease, background 0.18s ease;
 }
-.deck-pdf-fab:hover { transform: translateY(-1px); background: #322d24; }
+.deck-pdf-fab:hover:not(:disabled) { transform: translateY(-1px); background: #322d24; }
+.deck-pdf-fab:disabled { opacity: 0.65; cursor: default; }
 .deck-pdf-fab svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 
 .report-deck {

@@ -6,7 +6,9 @@ const API_BASE_URL =
 
 const client = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  // Match the API Lambda's 30s max so slow AI calls (Bedrock extraction/chat)
+  // aren't shown as client errors while the backend is still succeeding.
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },

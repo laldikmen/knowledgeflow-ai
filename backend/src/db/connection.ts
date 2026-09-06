@@ -4,6 +4,13 @@ import * as AWS from 'aws-sdk';
 
 dotenv.config();
 
+// serverless.yml deploys NODE_ENV as the stage name ('prod'), while local runs
+// use 'production' / 'development'. Treat both 'prod' and 'production' as
+// production so the Secrets Manager path below actually runs in the deployed
+// Lambda (previously it only matched 'production' and never fired in AWS).
+const isProduction =
+  process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+
 // Return DATE columns (OID 1082) as the raw 'YYYY-MM-DD' string instead of a
 // timezone-shifted Date object, so a deadline never lands on the wrong day.
 types.setTypeParser(1082, (value) => value);
@@ -30,11 +37,22 @@ async function initializePool() {
     ssl: { rejectUnauthorized: false },
   };
 
-  // Try to read from AWS Secrets Manager if in production
-  if (process.env.NODE_ENV === 'production' && process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  // Try to read from AWS Secrets Manager if in production. We only return a new
+  // pool when this actually succeeds, so a fall-back to env vars doesn't trigger
+  // a pointless pool swap (the synchronous env-based pool is already correct).
+  let loadedFromSecrets = false;
+  if (isProduction && process.env.AWS_LAMBDA_FUNCTION_NAME) {
     try {
+      // Fail fast: the Lambda runs in a VPC that only has endpoints for S3, SES
+      // and Bedrock. Without a Secrets Manager VPC endpoint (or NAT) this call
+      // can't reach the service, so cap the attempt at a few seconds and fall
+      // back to environment variables instead of hanging on a cold start.
       // @ts-ignore
-      const secretsManager = new AWS.SecretsManager({ region: process.env.S3_REGION || 'eu-central-1' });
+      const secretsManager = new AWS.SecretsManager({
+        region: process.env.S3_REGION || 'eu-central-1',
+        httpOptions: { connectTimeout: 3000, timeout: 3000 },
+        maxRetries: 1,
+      });
       const secret = await secretsManager.getSecretValue({ SecretId: 'knowledgeflow/prod/db' }).promise();
 
       if (secret.SecretString) {
@@ -47,6 +65,7 @@ async function initializePool() {
           password: credentials.password,
           ssl: { rejectUnauthorized: false },
         };
+        loadedFromSecrets = true;
         console.log('Database credentials loaded from AWS Secrets Manager');
       }
     } catch (error) {
@@ -54,7 +73,8 @@ async function initializePool() {
     }
   }
 
-  return new Pool(dbConfig);
+  // Null means "nothing new to swap to" — keep the existing env-based pool.
+  return loadedFromSecrets ? new Pool(dbConfig) : null;
 }
 
 // Initialize pool synchronously for backward compatibility
@@ -70,7 +90,7 @@ pool = new Pool({
 // If in Lambda, try to refresh credentials from Secrets Manager after first query
 if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
   initializePool().then(newPool => {
-    if (newPool && process.env.NODE_ENV === 'production') {
+    if (newPool && isProduction) {
       pool.end();
       pool = newPool;
     }

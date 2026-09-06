@@ -80,6 +80,13 @@ type DigestItem = { title: string; deadline: string };
  * Returns per-user counts.
  */
 export async function runDailyDigest(): Promise<{ users: number; details: any[] }> {
+  // Auto-prune: keep the bell tidy by removing digest notifications older than
+  // 7 days on every run (read or unread). Fresh digests are still written below.
+  await query(
+    `DELETE FROM notifications
+     WHERE type = 'digest' AND created_at < NOW() - INTERVAL '7 days'`,
+  );
+
   const rows = (
     await query(
       `SELECT a.assigned_to_user_id AS user_id, u.name, u.email,

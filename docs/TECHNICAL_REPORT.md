@@ -803,7 +803,7 @@ erDiagram
     }
     document_texts {
         serial id PK
-        int document_id FK_UK
+        int document_id FK, UK
         text extracted_text
     }
     document_chunks {
@@ -815,7 +815,7 @@ erDiagram
     }
     ai_summaries {
         serial id PK
-        int document_id FK_UK
+        int document_id FK, UK
         text summary_text
         varchar review_status "CHECK draft|confirmed|rejected"
         bool created_by_ai
@@ -992,7 +992,7 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     U->>FE: email + password, submit
-    FE->>FE: require both fields; require '@' in email
+    FE->>FE: require both fields, require an at-sign in email
     FE->>AX: client.post('/auth/login', { email lowercased, password })
     AX->>GW: POST /prod/auth/login
     GW->>L: proxy event
@@ -1065,7 +1065,7 @@ sequenceDiagram
     UP->>API: POST /documents/upload (multipart)
     API->>API: verifyToken
     API->>DB: SELECT project_role WHERE project_id, user_id
-    API->>API: reject viewer / non-member; size <= 50MB; isSupportedFile()
+    API->>API: reject viewer / non-member, size <= 50MB, isSupportedFile()
     API->>S3: PutObject projects/ID/documents/UUID.ext
     API->>DB: INSERT documents (status='uploaded')
     API->>API: extractText(buffer) - officeparser or UTF-8, never throws

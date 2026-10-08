@@ -20,11 +20,11 @@ provider:
   # VPC Configuration - Lambda in same VPC as RDS for secure database access
   vpc:
     securityGroupIds:
-      - sg-0d36780decb6c8b6c  # Lambda security group
+      - ${env:LAMBDA_SECURITY_GROUP_ID}  # Lambda security group
     subnetIds:
-      - subnet-07bdfb21edcc7c8ce
-      - subnet-0171f533e92f9c157
-      - subnet-01ff0fc4a0eb3ebc0
+      - ${env:LAMBDA_SUBNET_ID_1}
+      - ${env:LAMBDA_SUBNET_ID_2}
+      - ${env:LAMBDA_SUBNET_ID_3}
 
   # IAM Role with necessary permissions
   iam:

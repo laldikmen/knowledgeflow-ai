@@ -1,0 +1,48 @@
+Atlas Migration - Kick-off Meeting
+Date: 24 August 2026
+Location: Meeting Room 2 / video call
+Attendees: Inci, Bob, Dana, Contributor User
+
+---
+
+[00:00] Inci: Right, everyone's here. This is the kick-off for the Atlas platform migration. The goal today is to close out the two open questions from last week and agree how we are going to run this.
+
+[00:41] Bob: Before we start, are we still comparing options for the database layer, or is that closed?
+
+[00:52] Inci: It's closed. The team agreed that Atlas will run on PostgreSQL on Amazon RDS rather than a self-managed database on EC2. The operational overhead of running it ourselves was the deciding factor.
+
+[01:19] Dana: Good. That also means we get automated backups without building anything.
+
+[01:33] Contributor User: What about the cutover? Last time we talked about doing it all in one weekend.
+
+[01:47] Inci: We looked at that again and it was too risky. It was decided that the migration will be delivered in two phases instead of a single cutover weekend.
+
+[02:10] Bob: Two phases is much safer. It also means we can stop after phase one if something goes badly.
+
+[02:26] Dana: And the region? I know there was some debate about running closer to the US office.
+
+[02:38] Inci: The group concluded that eu-central-1 will be the primary region for Atlas. The majority of our users are in Europe and the data residency question is simpler there.
+
+[03:05] Dana: That settles it then.
+
+[03:12] Inci: Good. Now the pieces of work. We need a written scope for phase one before anyone starts building.
+
+[03:30] Inci: I'll take that one. Inci will draft the phase-one scope document and circulate it to the team by 1 September 2026.
+
+[03:52] Bob: I can look at the search side. We still don't know whether pgvector is fast enough at our document volume.
+
+[04:09] Inci: Please do. Can you put a date on it?
+
+[04:14] Bob: Bob will benchmark pgvector query performance on the staging instance by 4 September 2026.
+
+[04:36] Dana: I'll pick up the environment side. There's no proper staging database yet, and I'd rather not build one in a hurry.
+
+[04:55] Dana: Dana will provision the staging RDS instance and hand over the connection details by 18 September 2026.
+
+[05:18] Inci: That's enough to get us moving. Anything else?
+
+[05:26] Contributor User: Nothing from me.
+
+[05:31] Inci: Then let's stop there. We'll pick this up at the weekly sync.
+
+[05:40] -- End of meeting --

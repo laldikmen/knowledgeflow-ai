@@ -204,6 +204,11 @@ export const TaskEditModal: React.FC<TaskEditModalProps> = ({
                 value={form.owner}
                 onChange={(event) => updateField('owner', event.target.value)}
               >
+                {/* Explicit unassigned option: without a value="" option the
+                    browser would just display the first user for an unassigned
+                    task while form.owner stayed '', so re-selecting that user
+                    fired no change and the task stayed unassigned. */}
+                <option value="">Unassigned</option>
                 {owners.map((owner) => (
                   <option key={owner} value={owner}>
                     {owner}

@@ -1,0 +1,96 @@
+Atlas Migration - Weekly Sync
+Date: 7 September 2026
+Location: Meeting Room 2 / video call
+Attendees: Inci, Bob, Dana, Contributor User
+
+---
+
+[00:00] Inci: Let's get started. Agenda is the same as usual: scope questions first, then the pieces of work for the coming weeks.
+
+[00:18] Bob: Can we start with the legacy reporting system? Finance are asking whether it disappears on cutover day.
+
+[00:34] Inci: We discussed it with them on Thursday. The team agreed that the legacy reporting system will stay online in read-only mode for six months after cutover rather than being decommissioned immediately.
+
+[01:02] Dana: Six months is generous, but it removes the pressure to rebuild every report before we go live.
+
+[01:17] Bob: It also means we can compare old and new numbers side by side, which we will need.
+
+[01:31] Inci: Exactly. Next question. The mobile client keeps coming up in every conversation.
+
+[01:45] Contributor User: Is it in or out?
+
+[01:49] Inci: It's out. It was decided that the mobile client is out of scope for this migration. We will look at it separately once Atlas is stable.
+
+[02:11] Dana: That's a relief, honestly. It was the largest unknown in the plan.
+
+[02:23] Bob: While we're on scope, what did we land on for replication? There was a proposal to keep a copy of customer data in a second region.
+
+[02:41] Inci: We settled on keeping customer data in eu-central-1 only, with no cross-region replication for now.
+
+[03:04] Dana: Cost was the reason?
+
+[03:08] Inci: Cost, and the compliance review would have taken longer than the migration itself.
+
+[03:22] Bob: Fine. And the phase split, is that written down anywhere yet?
+
+[03:33] Inci: It is now. The team concluded that phase one covers the customer and billing tables, and phase two covers reporting.
+
+[03:56] Contributor User: Good, that matches what I assumed.
+
+[04:04] Bob: Last scope question from me. Are we doing single sign-on as part of this?
+
+[04:16] Inci: No. It was agreed that single sign-on is not part of this release.
+
+[04:29] Dana: The invite flow works well enough for now.
+
+[04:38] Inci: Right, that's scope closed. Let's talk about the actual work.
+
+[04:50] Inci: Bob, the schema side is the critical path. Nothing else can start until we know exactly how the tables are mapped.
+
+[05:07] Bob: Understood. Bob will produce the schema migration plan for the customer and billing tables and share it with the team by 9 September 2026.
+
+[05:31] Inci: That's tight, but it unblocks everyone else.
+
+[05:39] Bob: It's tight, but the mapping is mostly done. It's the write-up that's missing.
+
+[05:52] Inci: Good. Now, the reporting queries. They're currently scattered across three different machines and one of them is a laptop that is being replaced this month.
+
+[06:14] Contributor User: I've got copies of most of them already.
+
+[06:21] Inci: Then please get them somewhere safe. Give me a date.
+
+[06:29] Contributor User: Contributor User will export the legacy reporting queries into the shared repository by 10 September 2026.
+
+[06:51] Dana: I'd like to get numbers on the staging instance before we commit to the cutover window. We're guessing at the moment.
+
+[07:09] Inci: Agreed, we need real figures.
+
+[07:15] Dana: Dana will run a load test against the staging database and report the results by 14 September 2026.
+
+[07:37] Bob: Will that include the vector search, or just the relational side?
+
+[07:46] Dana: Both. It's the same instance.
+
+[07:54] Inci: One more thing. If phase one goes wrong at two in the morning, nobody should be improvising.
+
+[08:09] Bob: We don't have a rollback procedure written down at all.
+
+[08:18] Inci: I know. Inci will write the phase-one rollback runbook by 25 September 2026.
+
+[08:36] Dana: I'll want to read that before we schedule anything.
+
+[08:44] Inci: You'll have it. Speaking of scheduling, we need a slot from the infrastructure team, and they book up weeks ahead.
+
+[09:02] Dana: I'll chase them. Dana will book the cutover window with the infrastructure team by 2 October 2026.
+
+[09:22] Inci: Perfect. Anything still open?
+
+[09:29] Contributor User: Nothing from me.
+
+[09:33] Bob: Nothing here.
+
+[09:37] Dana: All clear.
+
+[09:41] Inci: Then we're done. Same time next week.
+
+[09:48] -- End of meeting --

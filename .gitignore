@@ -40,6 +40,10 @@ config
 # Frontend dependencies
 node_modules/
 
+# Local-only material (presentation scripts, Word exports)
+demo/
+*.docx
+
 # Temporary files
 tmp/
 temp/

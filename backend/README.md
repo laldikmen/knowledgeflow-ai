@@ -1,123 +1,54 @@
-# KnowledgeFlow AI - Backend API
+# KnowledgeFlow AI — Backend API
 
-Node.js/TypeScript backend for KnowledgeFlow AI using Express.js, PostgreSQL, and AWS services.
+Express 5 + TypeScript API backed by PostgreSQL (pgvector), S3, Amazon Bedrock and SES. The same app runs as a local dev server (`src/index.ts`) and as an AWS Lambda behind API Gateway (`src/lambda.ts`).
 
-## Setup Instructions
-
-### 1. Environment Variables
-
-Update `.env` with your actual AWS and database credentials:
-
-```env
-DB_HOST=your_rds_endpoint
-DB_PORT=5432
-DB_NAME=knowledgeflow_ai
-DB_USER=postgres
-DB_PASSWORD=your_password
-JWT_SECRET=your_secret_key
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-S3_BUCKET=your_bucket_name
-```
-
-### 2. Database Setup
-
-**Option A: Using Local PostgreSQL**
+## Setup
 
 ```bash
-# Create database
 createdb knowledgeflow_ai
+psql -d knowledgeflow_ai -f schema.sql   # requires the pgvector extension
 
-# Run schema
-psql -d knowledgeflow_ai -f schema.sql
-```
-
-**Option B: Using AWS RDS**
-
-1. Create RDS instance in AWS Console
-2. Get the endpoint and update `.env`
-3. Connect and run schema.sql
-
-### 3. Install Dependencies
-
-```bash
+cp .env.example .env                     # fill in DB, JWT and AWS settings
 npm install
+npx ts-node setup-test.ts                # optional: seed test users + a sample project
+npm run dev                              # http://localhost:3001
 ```
 
-### 4. Development
+AWS credentials are taken from your AWS CLI profile or IAM role, never from `.env`.
 
-**Run in development mode:**
-```bash
-npm run dev
-```
+## Scripts
 
-**Run with auto-reload:**
-```bash
-npm run dev:watch
-```
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Run with `ts-node` |
+| `npm run dev:watch` | Run with auto-reload |
+| `npm run build` | Compile to `dist/` |
+| `npm start` | Run the compiled server |
+| `npm run deploy` | Deploy with the Serverless Framework (run `npm run build` first) |
 
-### 5. Test Endpoints
+## Quick check
 
-**Health Check:**
 ```bash
 curl http://localhost:3001/health
 ```
 
-**Login (after creating user in DB):**
-```bash
-curl -X POST http://localhost:3001/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password123"}'
-```
-
-**Get Current User:**
-```bash
-curl -X GET http://localhost:3001/auth/me \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-## Creating Test User
-
-Connect to PostgreSQL and run:
-
-```sql
--- Using bcrypt hashed password (generate via npm script or online tool)
-INSERT INTO users (name, email, password_hash, system_role, account_status)
-VALUES (
-  'Test User',
-  'test@example.com',
-  '$2b$10$...',  -- bcrypt hash of 'password123'
-  'admin',
-  'active'
-);
-```
-
-## Build for Production
-
-```bash
-npm run build
-npm start
-```
-
-## Project Structure
+## Layout
 
 ```
-backend/
-├── src/
-│   ├── db/          # Database connection
-│   ├── handlers/    # Request handlers
-│   ├── middleware/  # Auth & validation middleware
-│   ├── routes/      # API routes
-│   ├── types/       # TypeScript interfaces
-│   └── index.ts     # Main server file
-├── schema.sql       # Database schema
-├── .env             # Environment variables
-└── package.json     # Dependencies
+src/
+├── index.ts        local server entry point
+├── lambda.ts       Lambda entry point (mounts the same routers)
+├── routes/         route definitions, one file per resource
+├── handlers/       request handlers and business logic
+├── middleware/     JWT verification and role checks
+├── utils/          embeddings, text extraction, email, risk scoring, auth tokens
+├── jobs/           scheduled daily digest (second Lambda)
+├── db/             PostgreSQL connection pool
+└── types/          shared TypeScript types
+schema.sql          full database schema
+serverless.yml      Lambda, API Gateway, IAM and schedule definition
 ```
 
-## Next Steps
+Any new router must be mounted in **both** `index.ts` and `lambda.ts`.
 
-- [ ] Phase 2: AWS Infrastructure Setup
-- [ ] Phase 3: Database Schema Deployment
-- [ ] Phase 4: Authentication Lambda
-- [ ] Phase 5: Additional API Endpoints
+See [`../docs/TECHNICAL_REFERENCE.md`](../docs/TECHNICAL_REFERENCE.md) for the full route list, schema and RBAC rules.

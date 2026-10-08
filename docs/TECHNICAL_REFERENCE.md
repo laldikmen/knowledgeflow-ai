@@ -6,7 +6,8 @@
 > AI chat, sends proactive notifications, and produces shareable project reports.
 
 This document is generated from an inspection of the current codebase (not from prior notes).
-It reflects the state of the `feature/backend-apis-ai-review-pipeline` branch.
+It reflects the final state of the project (September 2026). Account-specific AWS identifiers
+have been replaced with placeholders; the deployment itself has since been decommissioned.
 
 ---
 
@@ -162,7 +163,7 @@ uses the same hashed-token flow. Raw tokens live only in the link; the DB stores
 
 ## 6. API surface
 
-Base URL (prod): `https://pxk4tismnk.execute-api.eu-central-1.amazonaws.com/prod`
+Base URL (prod): `https://<api-id>.execute-api.eu-central-1.amazonaws.com/prod`
 
 | Router | Endpoints (method path — access) |
 |---|---|
@@ -302,8 +303,8 @@ This is the clearest gap for future work (see §14).
   passing `FRONTEND_URL=<cloudfront>` so links resolve to the live site.
 
 **Frontend** — Vite build → sync to **S3** → CloudFront invalidation:
-- S3 origin bucket: `knowledgeflow-ai-frontend-1786273819`
-- CloudFront distribution `EW8WIFQCSCG0Y` → **https://d29j4ypcs5cn1m.cloudfront.net**
+- S3 origin bucket: `<frontend-bucket>`
+- CloudFront distribution `<distribution-id>` → **https://<distribution>.cloudfront.net**
 - SPA deep-link fallback: 403/404 → `/index.html` so `/report/:token`, `/set-password`, etc. resolve.
 
 **Networking cost note:** the VPC Lambda reaches AWS services via **VPC endpoints** (SES + Bedrock
@@ -311,7 +312,7 @@ interface endpoints, S3 gateway endpoint) rather than a NAT gateway.
 
 ### 11.1 Live AWS resources (as deployed)
 
-Inspected directly from the account (`137769145125`, region `eu-central-1`).
+Inspected directly from the account (`<account-id>`, region `eu-central-1`).
 
 **Lambda functions** (both deployed from the same `dist/` package, ~61.5 MB code):
 
@@ -323,23 +324,23 @@ Inspected directly from the account (`137769145125`, region `eu-central-1`).
 - Configured env vars on the Lambda: `DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, JWT_SECRET,
   S3_BUCKET, S3_REGION, SES_REGION, EMAIL_ENABLED, EMAIL_FROM, FRONTEND_URL, NODE_ENV`
   (secret values not reproduced here).
-- `EMAIL_ENABLED=true`, `EMAIL_FROM="KnowledgeFlow AI <incilald@gmail.com>"`,
-  `FRONTEND_URL=https://d29j4ypcs5cn1m.cloudfront.net`.
+- `EMAIL_ENABLED=true`, `EMAIL_FROM="KnowledgeFlow AI <<verified-sender>>"`,
+  `FRONTEND_URL=https://<distribution>.cloudfront.net`.
 - **`BEDROCK_MODEL_ID` and `EMBEDDING_MODEL_ID` are *not* set on the Lambda**, so the models come
   from the code defaults: chat = `eu.anthropic.claude-haiku-4-5-20251001-v1:0`,
   embeddings = `amazon.titan-embed-text-v2:0`. `BEDROCK_REGION` also falls back to `S3_REGION`.
 
-**API Gateway:** REST API `pxk4tismnk`, stage `/prod`, `{proxy+}` → the `api` Lambda;
+**API Gateway:** REST API `<api-id>`, stage `/prod`, `{proxy+}` → the `api` Lambda;
 `binaryMediaTypes: application/pdf`.
 
 **S3 buckets** (both `eu-central-1`, all public-access blocks **ON** = fully private):
 
 | Bucket | Role | Notes |
 |---|---|---|
-| `knowledgeflow-ai-dev-inci-4827` | uploaded documents | AES256 default encryption; versioning off; ~17 objects (~48 KB) |
-| `knowledgeflow-ai-frontend-1786273819` | built SPA | served via CloudFront (no S3 website hosting; origin access); ~730 KB |
+| `<documents-bucket>` | uploaded documents | AES256 default encryption; versioning off; ~17 objects (~48 KB) |
+| `<frontend-bucket>` | built SPA | served via CloudFront (no S3 website hosting; origin access); ~730 KB |
 
-**CloudFront:** distribution `EW8WIFQCSCG0Y` → `d29j4ypcs5cn1m.cloudfront.net`, origin = the
+**CloudFront:** distribution `<distribution-id>` → `<distribution>.cloudfront.net`, origin = the
 frontend bucket, SPA fallback 403/404 → `/index.html`.
 
 **RDS (PostgreSQL):**
@@ -347,14 +348,14 @@ frontend bucket, SPA fallback 403/404 → `/index.html`.
 | Property | Value |
 |---|---|
 | Identifier | `knowledgeflow-dev-db` |
-| Endpoint | `knowledgeflow-dev-db.cvw48cea4ytg.eu-central-1.rds.amazonaws.com:5432` |
+| Endpoint | `<rds-endpoint>:5432` |
 | Engine | PostgreSQL **18.3** (+ pgvector extension) |
 | Class / storage | `db.t4g.micro` / 20 GB gp2 |
 | Storage encrypted | **Yes** |
 | Multi-AZ | No (single-AZ, `eu-central-1c`) |
 | Backup retention | **1 day** |
-| Publicly accessible flag | **Yes**, but the security group (`sg-0c7c7d3bae0714dee`) allows port 5432 **only** from one developer IP (`/32`) and the Lambda security group (`sg-0d36780decb6c8b6c`) |
-| VPC | `vpc-0cca54a174f1ba31b` |
+| Publicly accessible flag | **Yes**, but the security group (`<security-group-id>`) allows port 5432 **only** from one developer IP (`/32`) and the Lambda security group (`<security-group-id>`) |
+| VPC | `<vpc-id>` |
 
 Both local dev and the deployed Lambda connect to **this same RDS instance**, which is why the
 schema is identical across environments.

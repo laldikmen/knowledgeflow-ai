@@ -25,6 +25,9 @@ htmlcov/
 # VS Code local settings
 .vscode/
 
+# Claude Code local settings
+.claude/
+
 # macOS
 .DS_Store
 

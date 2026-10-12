@@ -73,8 +73,9 @@ provider:
     DB_PORT: ${env:DB_PORT, '5432'}
     DB_NAME: ${env:DB_NAME, 'knowledgeflow_ai'}
     DB_USER: ${env:DB_USER, 'postgres'}
-    DB_PASSWORD: ${env:DB_PASSWORD, 'password'}
-    JWT_SECRET: ${env:JWT_SECRET, 'dev-secret'}
+    # No defaults for secrets: a deploy without them set must fail.
+    DB_PASSWORD: ${env:DB_PASSWORD}
+    JWT_SECRET: ${env:JWT_SECRET}
     S3_BUCKET: ${env:S3_BUCKET, 'knowledgeflow-ai-dev'}
     S3_REGION: ${env:S3_REGION, 'eu-central-1'}
     # Email (Amazon SES). EMAIL_ENABLED=true turns on real delivery; the sender

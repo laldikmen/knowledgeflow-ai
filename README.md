@@ -28,9 +28,9 @@ An AI-powered enterprise knowledge hub that reads what your team uploads, extrac
 
 <br/>
 
-> **Built end to end by İnci Lal Dikmen** — frontend, backend, database, AI pipeline and AWS infrastructure — as a summer 2026 internship project.
+> **Designed and built solo by İnci Lal Dikmen** (frontend, backend, database, AI pipeline, AWS infrastructure) as a personal project in summer 2026, with AI coding assistance. I made the design decisions, reviewed the code and ran the deployment.
 >
-> The internship has ended and the live AWS deployment has been decommissioned, so there is no hosted demo. The code here is the final deployed version; the tour below shows it running.
+> The live AWS deployment has been decommissioned to save cost, so there is no hosted demo. The code here is the final deployed version; the tour below shows it running.
 
 ## 💡 The problem
 
@@ -252,7 +252,7 @@ Deployment to AWS is defined in [`backend/serverless.yml`](backend/serverless.ym
 
 ## 🔭 Known limitations
 
-This is an MVP built in a fixed internship window. AI processing runs synchronously inside the request, so very large documents can hit the 30-second Lambda limit; scanned PDFs without a text layer are not supported (no OCR); and chat answers each question independently, without conversational memory. The technical report covers these and the planned improvements in detail.
+This is an MVP built in a fixed eight-week window. AI processing runs synchronously inside the request, so very large documents can hit the 30-second Lambda limit; scanned PDFs without a text layer are not supported (no OCR); and chat answers each question independently, without conversational memory. The technical report covers these and the planned improvements in detail.
 
 ---
 

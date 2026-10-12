@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthUser, JWTPayload } from '../types';
 import { query } from '../db/connection';
+import { requireEnv } from '../utils/env';
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
 
 declare global {
   namespace Express {
@@ -27,10 +30,7 @@ export const verifyToken = async (
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'your-secret'
-    ) as JWTPayload;
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
 
     // Get user from database
     const result = await query(

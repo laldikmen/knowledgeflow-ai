@@ -10,11 +10,11 @@
     "start": "node dist/index.js",
     "deploy": "serverless deploy",
     "deploy:local": "serverless offline start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "İnci Lal Dikmen",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -47,6 +47,8 @@
     "serverless": "^3.40.0",
     "serverless-offline": "^14.8.0",
     "serverless-plugin-typescript": "^1.2.0",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
   }
 }

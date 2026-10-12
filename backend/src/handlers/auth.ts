@@ -9,6 +9,9 @@ import {
   markTokenUsed,
 } from '../utils/authTokens';
 import { emailEnabled, sendResetEmail } from '../utils/email';
+import { requireEnv } from '../utils/env';
+
+const JWT_SECRET = requireEnv('JWT_SECRET');
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -63,7 +66,7 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         systemRole: user.system_role,
       },
-      process.env.JWT_SECRET || 'your-secret',
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 

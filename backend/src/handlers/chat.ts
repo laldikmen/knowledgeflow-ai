@@ -13,9 +13,10 @@ function extractKeywords(text: string): string[] {
 type RelevantDoc = { id: number; title: string; text: string; similarity: number };
 
 // Keyword fallback — used when a document has no embeddings yet, or when semantic
-// search finds nothing confident. Prefers keyword-matched documents; if none
-// match, returns the most recent ones so general questions still get grounding.
-async function keywordFallback(
+// search finds nothing confident. Returns only keyword-matched documents; if none
+// match, returns nothing so the assistant declines instead of answering from
+// unrelated documents.
+export async function keywordFallback(
   projectId: number,
   userId: number,
   keywords: string[],
@@ -47,15 +48,15 @@ async function keywordFallback(
   });
 
   const matched = scoredDocs.filter(doc => doc.similarity > 0);
-  return (matched.length > 0 ? matched : scoredDocs)
+  return matched
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, 3);
 }
 
 // Hybrid retrieval: semantic (vector) search over document chunks, re-ranked with
 // a small keyword bonus, returning the best chunk per document (top 3). Falls back
-// to keyword search when there are no embeddings or no confident semantic match —
-// so both un-embedded documents and general questions still work.
+// to keyword search when there are no embeddings or no confident semantic match,
+// so un-embedded documents still work. No match on either path returns nothing.
 async function findRelevantDocuments(
   projectId: number,
   userId: number,

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../db/connection';
 import * as AWS from 'aws-sdk';
 import { embedAndStoreChunks } from '../utils/embeddings';
+import { verifiedSource } from '../utils/sourceExcerpt';
 import { createNotification } from './notifications';
 
 // Newer Claude models on Bedrock require a cross-region inference profile and the
@@ -182,7 +183,7 @@ ${documentText}`;
         await query(
           `INSERT INTO decisions (document_id, decision_text, source_excerpt, review_status, ai_confidence, created_by_ai)
            VALUES ($1, $2, $3, $4, $5, true)`,
-          [documentId, String(text).trim(), d?.source || null, 'draft', clampConfidence(d?.confidence, 0.7)]
+          [documentId, String(text).trim(), verifiedSource(d?.source, documentText), 'draft', clampConfidence(d?.confidence, 0.7)]
         );
       }
     }
@@ -207,7 +208,7 @@ ${documentText}`;
             documentId,
             document.project_id,
             String(item.title).trim(),
-            item.source || null,
+            verifiedSource(item.source, documentText),
             item.suggested_owner || item.suggested_owner_text || null,
             deadline,
             'draft',

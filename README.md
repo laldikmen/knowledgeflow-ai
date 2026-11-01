@@ -28,7 +28,7 @@ An AI-powered enterprise knowledge hub that reads what your team uploads, extrac
 
 <br/>
 
-> **Designed and built solo by İnci Lal Dikmen** (frontend, backend, database, AI pipeline, AWS infrastructure) as a personal project in summer 2026, with AI coding assistance. I made the design decisions, reviewed the code and ran the deployment.
+> **Designed and built solo by İnci Lal Dikmen** (frontend, backend, database, AI pipeline, AWS infrastructure) as my individual internship project in summer 2026, with AI coding assistance. I made the design decisions, reviewed the code and ran the deployment.
 >
 > The live AWS deployment has been decommissioned to save cost, so there is no hosted demo. The code here is the final deployed version; the tour below shows it running.
 
